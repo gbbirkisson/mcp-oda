@@ -68,6 +68,9 @@ uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
 uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
 ```
 
+> [!NOTE]
+> Browser data is stored by default in `~/.mcp-oda`
+
 ### Configuration
 
 #### Claude Desktop

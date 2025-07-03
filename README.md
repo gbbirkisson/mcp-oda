@@ -8,7 +8,7 @@
 </h1>
 
 <p align="center">
-  A Model Context Protocol (MCP) server for interacting with [Oda.com](https://oda.com)
+  A Model Context Protocol (MCP) server for interacting with <a href="https://oda.com">oda.com</a>
 </p>
 
 If this project is just what you needed and/or has been helpful to you, please consider buying

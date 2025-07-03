@@ -1,7 +1,7 @@
 <h1>
   <p align="center">
     <a href="https://github.com/gbbirkisson/mcp-oda">
-      <img src="logo.svg" alt="Logo" height="128">
+      <img src="icon.svg" alt="Logo" height="128">
     </a>
     <br>mcp-oda
   </p>

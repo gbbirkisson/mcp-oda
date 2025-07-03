@@ -1,7 +1,7 @@
 <h1>
   <p align="center">
     <a href="https://github.com/gbbirkisson/mcp-oda">
-      <img src="assets/favicon.png" alt="Logo" height="128">
+      <img src="logo.svg" alt="Logo" height="128">
     </a>
     <br>mcp-oda
   </p>
@@ -63,6 +63,9 @@ uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
 
 # The browser will open - log in to your Oda account
 # Close the browser when done
+
+# Verify you are still logged in
+uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
 ```
 
 ### Configuration

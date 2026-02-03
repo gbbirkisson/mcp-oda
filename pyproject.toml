@@ -1,13 +1,19 @@
 [project]
 name = "mcp-oda"
 version = "0.1.0"
-description = "Add your description here"
+description = "Mcp"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["mcp[cli]==1.10.1", "playwright==1.53.0"]
+dependencies = [
+  "mcp[cli]==1.10.1",
+  "playwright==1.53.0",
+]
 
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = [
+  "setuptools",
+  "setuptools-scm",
+]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
@@ -27,7 +33,16 @@ venv = ".venv"
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["E501", "D", "S603", "S607", "INP001", "PGH003", "PLR2004", "S101"]
+ignore = [
+  "E501",
+  "D",
+  "S603",
+  "S607",
+  "INP001",
+  "PGH003",
+  "PLR2004",
+  "S101",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

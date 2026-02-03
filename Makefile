@@ -11,7 +11,7 @@ SRC_FILES:=mcp_oda
 
 ${VENV}: pyproject.toml uv.lock
 	uv python install
-	uv venv ${VENV}
+	uv venv --clear ${VENV}
 	uv sync --all-extras
 	touch ${VENV}
 
@@ -32,7 +32,7 @@ test: ${VENV}  ## Run all tests
 
 .PHONY: test-debug
 test-debug: ${VENV}  ## Debug test
-	PWDEBUG=1 pytest -s -k ${TEST}
+	PWDEBUG=1 pytest --headed -s -k ${TEST}
 
 .PHONY: lint
 lint: ruff pyright  ## Run all linters

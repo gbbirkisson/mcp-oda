@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
+from playwright._impl._driver import compute_driver_executable, get_driver_env
 from playwright.async_api import BrowserContext, Page, async_playwright
 
 from mcp_oda import tools
@@ -37,41 +38,53 @@ mcp = FastMCP(
 
 
 @mcp.tool(
-    description="Open search page for any product. Some searches might give better results in norwegian, e.g. melk instead of milk.",
+    description="Search for products on Oda. Returns a list of products with their indices.",
 )
-async def search(ctx: Context, query: str) -> list[tools.SearchResult]:
+async def search_products(ctx: Context, query: str) -> list[tools.SearchResult]:
     page = _page(ctx)
-    return await tools.search(page, query)
+    return await tools.search_products(page, query)
 
 
 @mcp.tool(
-    description="Can only be used when searching, this will give you the next page of results.",
+    description="Get the next page of search results. Can only be used after a search.",
 )
-async def search_next(ctx: Context) -> list[tools.SearchResult]:
+async def search_next_page(ctx: Context) -> list[tools.SearchResult]:
     page = _page(ctx)
-    return await tools.search_next(page)
+    return await tools.search_next_page(page)
 
 
-@mcp.tool(description="Open up cart page and list items currently in the cart.")
-async def cart(ctx: Context) -> list[tools.CartItem]:
+@mcp.tool(
+    description="Get the previous page of search results. Can only be used after a search.",
+)
+async def search_previous_page(ctx: Context) -> list[tools.SearchResult]:
     page = _page(ctx)
-    return await tools.cart(page)
+    return await tools.search_previous_page(page)
 
 
-@mcp.tool(description="Add item on current page to cart.")
-async def add_to_cart(ctx: Context, index: int) -> bool:
+@mcp.tool(description="List items currently in the cart.")
+async def get_cart_contents(ctx: Context) -> list[tools.CartItem]:
     page = _page(ctx)
-    return await tools.add_to_cart(page, index)
+    return await tools.get_cart_contents(page)
 
 
-@mcp.tool(description="Remove item from cart.")
-async def remove_from_cart(ctx: Context, index: int) -> bool:
+@mcp.tool(
+    description="Add an item from the current search results to the cart using its index.",
+)
+async def add_search_result_to_cart(ctx: Context, index: int) -> bool:
     page = _page(ctx)
-    return await tools.remove_from_cart(page, index)
+    return await tools.add_search_result_to_cart(page, index)
+
+
+@mcp.tool(description="Remove an item from the cart using its index in the cart list.")
+async def remove_item_from_cart(ctx: Context, index: int) -> bool:
+    page = _page(ctx)
+    return await tools.remove_item_from_cart(page, index)
 
 
 @asynccontextmanager
-async def _create_browser(data_dir: Path, *, headless: bool = True) -> AsyncIterator[BrowserContext]:
+async def _create_browser(
+    data_dir: Path, *, headless: bool = True,
+) -> AsyncIterator[BrowserContext]:
     async with async_playwright() as p:
         browser = await p.chromium.launch_persistent_context(
             data_dir,
@@ -96,8 +109,6 @@ async def _run(data_dir: Path, *, headless: bool = True) -> None:
 
 
 async def _auth(data_dir: Path) -> None:
-    from playwright._impl._driver import compute_driver_executable, get_driver_env
-
     driver_executable, driver_cli = compute_driver_executable()
     # Use asyncio.to_thread for blocking subprocess call
     completed_process = await asyncio.to_thread(
@@ -122,7 +133,7 @@ async def _auth(data_dir: Path) -> None:
         try:
             # Wait for the browser/page to be closed by the user
             await page.wait_for_event("close", timeout=0)  # No timeout
-        except (Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt):  # noqa: BLE001
             # Browser was closed or interrupted
             logger.debug("Browser closed or interrupted")
         finally:
@@ -189,3 +200,4 @@ def main() -> None:
         asyncio.run(_auth(data_dir))
     else:
         asyncio.run(_run(data_dir, headless=not args.headed))
+

@@ -1,0 +1,6 @@
+---
+description: Show contents of Oda cart
+---
+
+Call the Oda MCP and list the contents of the cart using the `cart_get_contents` tool and
+display the results in a structured way.

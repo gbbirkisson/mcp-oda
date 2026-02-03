@@ -1,0 +1,11 @@
+{
+  "oda": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "${CLAUDE_PLUGIN_ROOT}",
+      "run",
+      "mcp-oda"
+    ]
+  }
+}

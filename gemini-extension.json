@@ -1,7 +1,7 @@
 {
   "name": "mcp-oda",
   "description": "Integration with Oda for searching products and managing your shopping cart.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpServers": {
     "oda": {
       "cwd": "${extensionPath}",

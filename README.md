@@ -27,6 +27,7 @@ me a coffee ☕
   * [Configuration](#configuration)
     * [Claude Desktop](#claude-desktop)
     * [Claude Code](#claude-code)
+    * [Gemini CLI](#gemini-cli)
 * [Troubleshooting](#troubleshooting)
   * [Session not persisting](#session-not-persisting)
   * [Browser issues](#browser-issues)
@@ -90,7 +91,14 @@ Claude Desktop configuration example:
 #### Claude Code
 
 ```bash
-claude mcp add oda -s user -- uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda
+/plugin marketplace add gbbirkisson/mcp-oda
+/plugin install mcp-oda@mcp-oda
+```
+
+#### Gemini CLI
+
+```bash
+gemini extensions install https://github.com/gbbirkisson/mcp-oda
 ```
 
 ## Troubleshooting

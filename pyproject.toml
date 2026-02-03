@@ -1,7 +1,7 @@
 [project]
 name = "mcp-oda"
 version = "0.1.0"
-description = "Mcp"
+description = "Integration with Oda for searching products and managing your shopping cart."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,6 +16,9 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["mcp_oda"]
+
 [project.scripts]
 mcp-oda = "mcp_oda.__main__:main"
 
@@ -24,6 +27,7 @@ dev = [
   "icecream>=2.1.4",
   "pyright>=1.1.400",
   "pytest-playwright-asyncio>=0.7.0",
+  "pytest-xdist>=3.8.0",
   "ruff>=0.11.9",
 ]
 
@@ -42,12 +46,13 @@ ignore = [
   "PGH003",
   "PLR2004",
   "S101",
+  "ERA001",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_test_loop_scope = "session"
 asyncio_default_fixture_loop_scope = "session"
-addopts = "--browser chromium"
+addopts = "--browser chromium --durations=0 -n auto"
 # addopts = "--headed --browser chromium"
 testpaths = ["tests"]

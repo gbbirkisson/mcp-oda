@@ -4,10 +4,11 @@ VENV:=.venv
 VENV_BIN:=${VENV}/bin
 VENV_PYTHON:=${VENV_BIN}/python
 
+PYTEST:=${VENV_BIN}/pytest
 RUFF:=${VENV_BIN}/ruff
 PYRIGHT:=${VENV_BIN}/pyright
 
-SRC_FILES:=mcp_oda
+SRC_FILES:=mcp_oda tests
 
 ${VENV}: pyproject.toml uv.lock
 	uv python install
@@ -28,11 +29,11 @@ ci: lint test  ## Run all CI steps
 
 .PHONY: test
 test: ${VENV}  ## Run all tests
-	pytest
+	${PYTEST}
 
 .PHONY: test-debug
 test-debug: ${VENV}  ## Debug test
-	PWDEBUG=1 pytest --headed -s -k ${TEST}
+	PWDEBUG=0 ${PYTEST} -n 1 --headed -s -k ${TEST}
 
 .PHONY: lint
 lint: ruff pyright  ## Run all linters

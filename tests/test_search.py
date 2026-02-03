@@ -1,20 +1,21 @@
+from mcp.server.fastmcp import Context
 from playwright.async_api import Page
 
-from mcp_oda.tools import (
-    add_search_result_to_cart,
-    get_cart_contents,
-    remove_item_from_cart,
-    search_next_page,
-    search_products,
+from mcp_oda.__main__ import (
+    cart_get_contents,
+    cart_remove_item,
+    product_add_to_cart,
+    products_search,
+    products_search_next,
 )
 
 
-async def test_cart(page: Page) -> None:
+async def test_search_and_add_to_cart(page: Page, mcp_context: Context) -> None:
     # Ensure we are on the site
     await page.goto("https://oda.com/no/")
 
     # Check initial cart state (might be empty)
-    res = await get_cart_contents(page)
+    res = await cart_get_contents(mcp_context)
     # If we are not logged in, cart might be empty.
     # We clear it if it's not? Or assume it's empty for test.
     # Since we can't easily clear without knowing what's in it, we assume 0 or handle cleanup later.
@@ -26,32 +27,34 @@ async def test_cart(page: Page) -> None:
     assert len(res) == 0
 
     # Search
-    products = await search_products(page, "club mate original")
-    assert len(products) > 0
+    page_result = await products_search(mcp_context, "club mate original")
+    assert len(page_result.items) > 0
+    # Items no longer have URL, but page does
+    assert page_result.page_url.startswith("https://oda.com")
 
     # Add to cart
     # Note: This might require login on the real site.
     # If it fails/redirects to login, the test will fail.
     # We proceed assuming anonymous cart is possible or environment is set up.
-    await add_search_result_to_cart(page, products[0].index)
+    await product_add_to_cart(mcp_context, page_result.items[0].index)
 
     # Verify add
-    res = await get_cart_contents(page)
+    res = await cart_get_contents(mcp_context)
     assert len(res) == 1
     # Flexible match in case of formatting differences
     assert "Club-Mate" in res[0].name
 
     # Remove
-    await remove_item_from_cart(page, res[0].index)
+    await cart_remove_item(mcp_context, res[0].index)
 
     # Verify remove
-    res = await get_cart_contents(page)
+    res = await cart_get_contents(mcp_context)
     assert len(res) == 0
 
 
-async def test_pagination(page: Page) -> None:
-    p1 = await search_products(page, "melk")
-    assert len(p1) > 0
-    p2 = await search_next_page(page)
-    assert len(p2) > 0
-    assert p1 != p2
+async def test_search_and_pagination(mcp_context: Context) -> None:
+    p1 = await products_search(mcp_context, "melk")
+    assert len(p1.items) > 0
+    p2 = await products_search_next(mcp_context)
+    assert len(p2.items) > 0
+    assert p1.items != p2.items

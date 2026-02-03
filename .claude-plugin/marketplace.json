@@ -1,0 +1,13 @@
+{
+  "name": "mcp-oda",
+  "owner": {
+    "name": "gbbirkisson",
+    "email": "gbb@gbb.is"
+  },
+  "plugins": [
+    {
+      "name": "mcp-oda",
+      "source": "."
+    }
+  ]
+}

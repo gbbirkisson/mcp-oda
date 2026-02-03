@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "mcp[cli]==1.26.0",
-  "playwright==1.53.0",
+  "playwright==1.58.0",
 ]
 
 [build-system]

@@ -26,7 +26,6 @@ me a coffee ☕
   * [Initial Setup](#initial-setup)
   * [Configuration](#configuration)
     * [Claude Desktop](#claude-desktop)
-    * [Claude Code](#claude-code)
     * [Gemini CLI](#gemini-cli)
 * [Troubleshooting](#troubleshooting)
   * [Session not persisting](#session-not-persisting)
@@ -45,28 +44,36 @@ This MCP server provides tools to programmatically interact with Oda's grocery s
 
 ## Installation
 
-The easiest way to use mcp-oda is with [uvx](https://github.com/astral-sh/uv):
+This project requires Node.js (v18+).
 
 ```bash
-# Run directly from GitHub
-uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --help
+npx playwright install chromium
 ```
 
 ## Usage
 
 ### Initial Setup
 
-First, you need to authenticate with your Oda account:
+First, you need to authenticate with your Oda account using the `auth` subcommand:
 
 ```bash
 # Open browser for authentication
-uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
+npx github:gbbirkisson/mcp-oda auth
 
 # The browser will open - log in to your Oda account
 # Close the browser when done
+```
 
-# Verify you are still logged in
-uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
+Alternatively, you can provide your credentials for automated login:
+
+```bash
+npx github:gbbirkisson/mcp-oda auth --user your@email.com --pass yourpassword
+```
+
+You can verify your login status using the `user` command:
+
+```bash
+npx github:gbbirkisson/mcp-oda user
 ```
 
 > [!NOTE]
@@ -81,18 +88,17 @@ Claude Desktop configuration example:
 {
   "mcpServers": {
     "oda": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/gbbirkisson/mcp-oda", "mcp-oda"]
+      "command": "npx",
+      "args": ["-y", "github:gbbirkisson/mcp-oda"]
     }
   }
 }
 ```
+ #### Claude Code                                                                     │
 
-#### Claude Code
-
-```bash
-/plugin marketplace add gbbirkisson/mcp-oda
-/plugin install mcp-oda@mcp-oda
+```bash                                                                              │
+/plugin marketplace add gbbirkisson/mcp-oda                                          │
+/plugin install mcp-oda@mcp-oda                                                      │
 ```
 
 #### Gemini CLI
@@ -107,18 +113,27 @@ gemini extensions install https://github.com/gbbirkisson/mcp-oda
 
 If your login session is not persisting between runs:
 
-1. Try running with `--clean` to remove old session data
-2. Re-authenticate with `--auth`
-3. Make sure you're using the same `--data-dir` for both auth and normal runs
+1. Try running with the `clean` subcommand to remove old session data:
+   ```bash
+   npx github:gbbirkisson/mcp-oda clean
+   ```
+2. Re-authenticate with `auth`:
+   ```bash
+   npx github:gbbirkisson/mcp-oda auth
+   ```
+3. Make sure you're using the same `--data-dir` for all commands if you've overridden the default.
 
 ### Browser issues
 
-If you encounter browser-related issues:
+If you encounter browser-related issues, use the `clean` command and re-install playwright binaries:
 
 ```bash
 # Clean browser data
-uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --clean
+npx github:gbbirkisson/mcp-oda clean
+
+# Re-install browser
+npx playwright install chromium
 
 # Re-authenticate
-uvx --from git+https://github.com/gbbirkisson/mcp-oda mcp-oda --auth
+npx github:gbbirkisson/mcp-oda auth
 ```

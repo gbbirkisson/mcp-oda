@@ -1,12 +1,32 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
+# Node
+node_modules/
 dist/
-wheels/
-*.egg-info
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# Virtual environments
-.venv
-.pytest_cache
-.ruff_cache
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Project specific
+.mcp-oda/
+cookies.json

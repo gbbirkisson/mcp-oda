@@ -5,7 +5,9 @@
   "extra-label": "release",
   "packages": {
     ".": {
-      "release-type": "python",
+      "release-type": "node",
+      "package-name": "mcp-oda",
+      "version-file": "package.json",
       "extra-files": [
         {
           "type": "generic",

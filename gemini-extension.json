@@ -5,10 +5,10 @@
   "mcpServers": {
     "oda": {
       "cwd": "${extensionPath}",
-      "command": "uv",
+      "command": "npx",
       "args": [
-        "run",
-        "mcp-oda"
+        "-y",
+        "."
       ]
     }
   }

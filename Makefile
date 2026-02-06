@@ -1,61 +1,34 @@
 .DEFAULT_GOAL:=help
 
-VENV:=.venv
-VENV_BIN:=${VENV}/bin
-VENV_PYTHON:=${VENV_BIN}/python
-
-PYTEST:=${VENV_BIN}/pytest
-RUFF:=${VENV_BIN}/ruff
-PYRIGHT:=${VENV_BIN}/pyright
-
-SRC_FILES:=mcp_oda tests
-
-${VENV}: pyproject.toml uv.lock
-	uv python install
-	uv venv --clear ${VENV}
-	uv sync --all-extras
-	touch ${VENV}
+NPM:=npm
+NPX:=npx
 
 .PHONY: install
-install:  # Install current commit locally
-	pipx install -f .
+install:  ## Install dependencies and browsers
+	${NPM} install
+	${NPX} playwright install chromium
 
-.PHONY: inspector
-inspector: ${VENV}  # Run mcp inspector for testing
-	npx @modelcontextprotocol/inspector uv run mcp-oda --headed
-
-.PHONY: ci
-ci: lint test  ## Run all CI steps
+.PHONY: build
+build:  ## Build the project
+	${NPM} run build
 
 .PHONY: test
-test: ${VENV}  ## Run all tests
-	${PYTEST}
+test:  ## Run tests (run once)
+	${NPM} test -- run
 
-.PHONY: test-debug
-test-debug: ${VENV}  ## Debug test
-	PWDEBUG=0 ${PYTEST} -n 1 --headed -s -k ${TEST}
+.PHONY: run
+run: build  ## Run the MCP server
+	${NPM} start
 
-.PHONY: lint
-lint: ruff pyright  ## Run all linters
-
-.PHONY: ruff
-ruff: ${VENV}  ## Run ruff linter
-	${RUFF} check ${SRC_FILES}
-
-.PHONY: pyright
-pyright: ${VENV}  ## Run pyright linter
-	${PYRIGHT} ${SRC_FILES}
-
-.PHONY: format
-format: ${VENV}  ## Run formatter on source files
-	${RUFF} format ${SRC_FILES}
-	${RUFF} check --fix --force-exclude --select=I001 ${SRC_FILES}
+.PHONY: inspector
+inspector: build  ## Run mcp inspector for testing
+	npx @modelcontextprotocol/inspector node dist/index.js --headed
 
 .PHONY: clean
-clean:  ## Delete virtual environment
-	rm -r ${VENV}
+clean:  ## Clean build artifacts
+	rm -rf dist node_modules
 
 help: ## Show this help
 	$(eval HELP_COL_WIDTH:=13)
 	@echo "Makefile targets:"
-	@grep -E '[^\s]+:.*?## .*$$' ${MAKEFILE_LIST} | grep -v grep | envsubst | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-${HELP_COL_WIDTH}s\033[0m %s\n", $$1, $$2}'
+	@grep -E '[^\s]+:.*?## .*$$' ${MAKEFILE_LIST} | grep -v grep | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-${HELP_COL_WIDTH}s\033[0m %s\n", $$1, $$2}'

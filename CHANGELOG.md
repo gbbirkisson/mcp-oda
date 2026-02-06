@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/gbbirkisson/mcp-oda/compare/0.3.1...0.3.2) (2026-02-06)
+
+
+### Bug Fixes
+
+* add post install script ([7e3c49b](https://github.com/gbbirkisson/mcp-oda/commit/7e3c49b104365747cfeb08562c7f7b8bba55008b))
+
 ## [0.3.1](https://github.com/gbbirkisson/mcp-oda/compare/0.3.0...0.3.1) (2026-02-06)
 
 

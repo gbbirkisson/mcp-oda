@@ -1,6 +1,6 @@
 {
   "name": "mcp-oda",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Integration with Oda for searching products and managing your shopping cart.",
   "main": "dist/index.js",
   "bin": {

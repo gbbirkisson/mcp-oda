@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/gbbirkisson/mcp-oda/compare/0.3.3...0.3.4) (2026-02-06)
+
+
+### Bug Fixes
+
+* try disable gpu ([69da0da](https://github.com/gbbirkisson/mcp-oda/commit/69da0da6d460c36b7227d22cc9031dcb6aa93db5))
+
 ## [0.3.3](https://github.com/gbbirkisson/mcp-oda/compare/0.3.2...0.3.3) (2026-02-06)
 
 

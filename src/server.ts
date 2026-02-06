@@ -381,8 +381,9 @@ export class OdaServer {
     fs.mkdirSync(this.dataDir, { recursive: true });
 
     this.browser = await chromium.launchPersistentContext(this.dataDir, {
+      channel: "chromium",
       headless: this.headless,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"], // Often needed in containers/linux
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"], // Often needed in containers/linux
     });
 
     const cookiesPath = path.join(this.dataDir, "cookies.json");
@@ -423,7 +424,9 @@ export class OdaServer {
     const headless = (username && password) ? this.headless : false;
 
     const browser = await chromium.launchPersistentContext(this.dataDir, {
+      channel: "chromium",
       headless: headless,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
     });
     const page = browser.pages()[0];
 
@@ -491,7 +494,9 @@ export class OdaServer {
   async checkUser() {
       // Ephemeral browser for check
       const browser = await chromium.launchPersistentContext(this.dataDir, {
-          headless: this.headless
+          channel: "chromium",
+          headless: this.headless,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
       });
       const page = browser.pages()[0];
       

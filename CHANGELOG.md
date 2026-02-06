@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/gbbirkisson/mcp-oda/compare/0.3.0...0.3.1) (2026-02-06)
+
+
+### Bug Fixes
+
+* running with npx ([b99f6f0](https://github.com/gbbirkisson/mcp-oda/commit/b99f6f0b7abef9a7a93f8410b56041a04b8f5c9a))
+
 ## [0.3.0](https://github.com/gbbirkisson/mcp-oda/compare/0.2.0...0.3.0) (2026-02-06)
 
 

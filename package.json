@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
     "prepare": "npm run build",
-    "postinstall": "playwright install chromium",
+    "postinstall": "playwright install chromium chromium-headless-shell",
     "start": "node dist/index.js",
     "lint": "eslint src tests",
     "format": "prettier --write \"src/**/*.ts\"",

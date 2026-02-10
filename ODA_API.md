@@ -274,8 +274,8 @@ The `"user"` dehydrated query is present on all pages (when authenticated):
 {
   "hashedUserId": "...",
   "email": "user@example.com",
-  "firstName": "Gudmundur Bjorn",
-  "lastName": "Birkisson",
+  "firstName": "Dude",
+  "lastName": "Dudeson",
   "isProfileComplete": true
 }
 ```

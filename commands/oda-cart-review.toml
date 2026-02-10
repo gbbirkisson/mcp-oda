@@ -1,0 +1,25 @@
+description = "Review cart before checkout"
+prompt = """
+Review my Oda cart before checkout.
+
+## Step 1: Fetch cart
+
+Call the `cart_get_contents` tool to retrieve the current cart contents.
+
+## Step 2: Summarize
+
+Present a summary with:
+- Items grouped by category
+- Total estimated cost
+- Any observations: duplicates, missing staples, or cheaper alternatives worth considering
+
+## Step 3: Suggest pruning
+
+Recipe ingredients often overlap. Multiple recipes may each add salt, pepper, olive oil, or
+common herbs/spices. I usually already have these at home. Identify items that are likely
+duplicates or pantry staples I already own and propose removing them. Show the estimated
+savings.
+
+Do NOT remove anything yet. Present the pruning plan and wait for my approval before making
+any changes to the cart.
+"""

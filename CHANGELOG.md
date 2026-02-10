@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/gbbirkisson/mcp-oda/compare/0.4.0...0.4.1) (2026-02-10)
+
+
+### Bug Fixes
+
+* do not print anything to stdout ([#17](https://github.com/gbbirkisson/mcp-oda/issues/17)) ([b641a91](https://github.com/gbbirkisson/mcp-oda/commit/b641a91c58423846cd95d3be71264bdf9ebfdf5d))
+
 ## [0.4.0](https://github.com/gbbirkisson/mcp-oda/compare/0.3.4...0.4.0) (2026-02-10)
 
 

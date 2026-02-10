@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/gbbirkisson/mcp-oda/compare/0.4.3...0.4.4) (2026-02-10)
+
+
+### Bug Fixes
+
+* simplify how the server is run ([#23](https://github.com/gbbirkisson/mcp-oda/issues/23)) ([f2f0f7d](https://github.com/gbbirkisson/mcp-oda/commit/f2f0f7dad2a30c67ffdb1caa35774f124f284b54))
+
 ## [0.4.3](https://github.com/gbbirkisson/mcp-oda/compare/0.4.2...0.4.3) (2026-02-10)
 
 

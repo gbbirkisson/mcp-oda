@@ -175,9 +175,9 @@ export class OdaServer {
     if (success) {
       const userName = await client.checkUser();
       if (userName) {
-        console.log(`Successfully logged in as: ${userName}`);
+        console.error(`Successfully logged in as: ${userName}`);
       } else {
-        console.log("Login successful (could not determine name).");
+        console.error("Login successful (could not determine name).");
       }
     } else {
       console.error(
@@ -195,9 +195,9 @@ export class OdaServer {
     try {
       const userName = await client.checkUser();
       if (userName) {
-        console.log(`Logged in as: ${userName}`);
+        console.error(`Logged in as: ${userName}`);
       } else {
-        console.log("Not logged in.");
+        console.error("Not logged in.");
       }
     } catch (e) {
       console.error("Failed to check user:", e);

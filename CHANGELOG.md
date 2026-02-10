@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/gbbirkisson/mcp-oda/compare/0.4.2...0.4.3) (2026-02-10)
+
+
+### Bug Fixes
+
+* bootstrap server on first run ([#21](https://github.com/gbbirkisson/mcp-oda/issues/21)) ([67bea48](https://github.com/gbbirkisson/mcp-oda/commit/67bea483ef8e20c3ef6c84f3c5d340aacec28d5d))
+
 ## [0.4.2](https://github.com/gbbirkisson/mcp-oda/compare/0.4.1...0.4.2) (2026-02-10)
 
 

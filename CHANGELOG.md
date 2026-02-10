@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/gbbirkisson/mcp-oda/compare/0.4.1...0.4.2) (2026-02-10)
+
+
+### Bug Fixes
+
+* use a custom entrypoint for the mcp ([#19](https://github.com/gbbirkisson/mcp-oda/issues/19)) ([78fee22](https://github.com/gbbirkisson/mcp-oda/commit/78fee22dc36d9256ca5759543dc07686099e7e92))
+
 ## [0.4.1](https://github.com/gbbirkisson/mcp-oda/compare/0.4.0...0.4.1) (2026-02-10)
 
 

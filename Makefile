@@ -4,17 +4,16 @@ NPM:=npm
 NPX:=npx
 
 .PHONY: install
-install:  ## Install dependencies and browsers
+install:  ## Install dependencies
 	${NPM} install
-	${NPX} playwright install chromium
 
 .PHONY: build
 build:  ## Build the project
 	${NPM} run build
 
 .PHONY: test
-test:  ## Run tests (run once)
-	${NPM} test -- run
+test:  ## Run tests
+	${NPM} test
 
 .PHONY: run
 run: build  ## Run the MCP server
@@ -22,7 +21,7 @@ run: build  ## Run the MCP server
 
 .PHONY: inspector
 inspector: build  ## Run mcp inspector for testing
-	npx @modelcontextprotocol/inspector node dist/index.js --headed
+	npx @modelcontextprotocol/inspector node dist/index.js mcp
 
 .PHONY: clean
 clean:  ## Clean build artifacts

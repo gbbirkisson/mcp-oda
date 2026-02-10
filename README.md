@@ -24,12 +24,13 @@ me a coffee ☕
 * [Installation](#installation)
 * [Usage](#usage)
   * [Initial Setup](#initial-setup)
+  * [CLI Commands](#cli-commands)
   * [Configuration](#configuration)
     * [Claude Desktop](#claude-desktop)
+    * [Claude Code](#claude-code)
     * [Gemini CLI](#gemini-cli)
 * [Troubleshooting](#troubleshooting)
   * [Session not persisting](#session-not-persisting)
-  * [Browser issues](#browser-issues)
 
 <!-- vim-markdown-toc -->
 
@@ -38,46 +39,67 @@ me a coffee ☕
 This MCP server provides tools to programmatically interact with Oda's grocery shopping platform:
 
 - **Search products** - Search for groceries with support for Norwegian terms
-- **Browse search results** - Navigate through paginated search results
-- **Manage shopping cart** - View cart contents, add items, and remove items
+- **Browse recipes** - Search, filter, and view recipe details
+- **Manage shopping cart** - View cart contents, add/remove items, add recipe ingredients
+- **CLI access** - All operations available as CLI subcommands in addition to MCP tools
 - **Session persistence** - Maintains login session across restarts
 
 ## Installation
 
 This project requires Node.js (v18+).
 
-```bash
-npx playwright install chromium
-```
-
 ## Usage
 
 ### Initial Setup
 
-First, you need to authenticate with your Oda account using the `auth` subcommand:
+Authenticate with your Oda account:
 
 ```bash
-# Open browser for authentication
-npx github:gbbirkisson/mcp-oda auth
-
-# The browser will open - log in to your Oda account
-# Close the browser when done
+npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
 ```
 
-Alternatively, you can provide your credentials for automated login:
+Verify your login status:
 
 ```bash
-npx github:gbbirkisson/mcp-oda auth --user your@email.com --pass yourpassword
-```
-
-You can verify your login status using the `user` command:
-
-```bash
-npx github:gbbirkisson/mcp-oda user
+npx github:gbbirkisson/mcp-oda auth user
 ```
 
 > [!NOTE]
-> Browser data is stored by default in `~/.mcp-oda`
+> Session data is stored by default in `~/.mcp-oda`
+
+### CLI Commands
+
+Running `npx github:gbbirkisson/mcp-oda` with no arguments prints help. The `mcp` subcommand
+starts the MCP server. All other operations are available as subcommands:
+
+```bash
+# Start the MCP server
+npx github:gbbirkisson/mcp-oda mcp
+
+# Products
+npx github:gbbirkisson/mcp-oda product search melk
+npx github:gbbirkisson/mcp-oda product search melk --page 2
+npx github:gbbirkisson/mcp-oda product add 132
+
+# Cart
+npx github:gbbirkisson/mcp-oda cart list
+npx github:gbbirkisson/mcp-oda cart remove 132
+npx github:gbbirkisson/mcp-oda cart clear
+
+# Recipes
+npx github:gbbirkisson/mcp-oda recipe search pizza
+npx github:gbbirkisson/mcp-oda recipe details 123
+npx github:gbbirkisson/mcp-oda recipe add 123 --portions 4
+npx github:gbbirkisson/mcp-oda recipe remove 123
+
+# Authentication
+npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+npx github:gbbirkisson/mcp-oda auth logout
+npx github:gbbirkisson/mcp-oda auth user
+
+# Maintenance
+npx github:gbbirkisson/mcp-oda clean
+```
 
 ### Configuration
 
@@ -89,16 +111,17 @@ Claude Desktop configuration example:
   "mcpServers": {
     "oda": {
       "command": "npx",
-      "args": ["-y", "github:gbbirkisson/mcp-oda"]
+      "args": ["-y", "github:gbbirkisson/mcp-oda", "mcp"]
     }
   }
 }
 ```
- #### Claude Code                                                                     │
 
-```bash                                                                              │
-/plugin marketplace add gbbirkisson/mcp-oda                                          │
-/plugin install mcp-oda@mcp-oda                                                      │
+#### Claude Code
+
+```bash
+/plugin marketplace add gbbirkisson/mcp-oda
+/plugin install mcp-oda@gbbirkisson/mcp-oda
 ```
 
 #### Gemini CLI
@@ -117,23 +140,8 @@ If your login session is not persisting between runs:
    ```bash
    npx github:gbbirkisson/mcp-oda clean
    ```
-2. Re-authenticate with `auth`:
+2. Re-authenticate:
    ```bash
-   npx github:gbbirkisson/mcp-oda auth
+   npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
    ```
 3. Make sure you're using the same `--data-dir` for all commands if you've overridden the default.
-
-### Browser issues
-
-If you encounter browser-related issues, use the `clean` command and re-install playwright binaries:
-
-```bash
-# Clean browser data
-npx github:gbbirkisson/mcp-oda clean
-
-# Re-install browser
-npx playwright install chromium
-
-# Re-authenticate
-npx github:gbbirkisson/mcp-oda auth
-```

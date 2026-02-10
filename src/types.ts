@@ -1,5 +1,5 @@
 export interface SearchResult {
-  index: number;
+  id: number;
   name: string;
   subtitle: string;
   price: number;
@@ -10,10 +10,11 @@ export interface SearchResult {
 export interface ProductPage {
   page_url: string;
   items: SearchResult[];
+  has_more: boolean;
 }
 
 export interface CartItem {
-  index: number;
+  id: number;
   name: string;
   subtitle: string;
   quantity: number;
@@ -23,7 +24,7 @@ export interface CartItem {
 }
 
 export interface Recipe {
-  index: number;
+  id: number;
   name: string;
   image_url?: string;
   duration?: string;
@@ -41,6 +42,7 @@ export interface RecipePage {
   page_url: string;
   filters: RecipeFilter[];
   items: Recipe[];
+  has_more: boolean;
 }
 
 export interface RecipeDetail {

@@ -1,5 +1,3 @@
-import { Page, Locator } from "playwright";
-import { expect } from "@playwright/test";
 import {
   SearchResult,
   ProductPage,
@@ -9,715 +7,601 @@ import {
   RecipePage,
   RecipeDetail,
 } from "./types.js";
-
-class Parsers {
-  static parsePrice(text: string | null): number {
-    if (!text) return 0.0;
-    try {
-      // Remove currency, non-breaking spaces, regular spaces (thousands separator)
-      const cleanText = text
-        .replace(/kr/g, "")
-        .replace(/\xa0/g, "")
-        .replace(/ /g, "")
-        .replace(/,/g, ".")
-        .trim();
-      return parseFloat(cleanText) || 0.0;
-    } catch {
-      return 0.0;
-    }
-  }
-
-  static parseRelativePrice(text: string | null): [number, string] {
-    if (!text) return [0.0, ""];
-    try {
-      // Format usually: "61,80 kr /l" or similar
-      const parts = text
-        .replace(/\xa0/g, " ")
-        .replace(/\u2009/g, " ")
-        .split("/");
-      const pricePart = parts[0];
-      const unitPart = parts.length > 1 ? "/" + parts[1].trim() : "";
-      return [Parsers.parsePrice(pricePart), unitPart];
-    } catch {
-      return [0.0, ""];
-    }
-  }
-}
-
-class Selectors {
-  // Cart
-  static CART_TITLE = "Handlekurv – Oda";
-  static CART_EMPTY_MSG = 'span:has-text("Du har ingen varer i handlekurven.")';
-  static CART_CHECK_MSG =
-    'span:has-text("Sjekk handlekurven før du går til kassen og betaler.")';
-  static CART_ARTICLE = "article";
-  static CART_ITEM_NAME = "h1";
-  static CART_ITEM_SUBTITLE = ".styles_ProductInfoText__bDdwb span";
-  static CART_ITEM_QUANTITY = "input[data-testid='cart-buttons-quantity']";
-  static CART_ITEM_PRICE = ".k-text--weight-bold"; // Last one usually
-  static CART_ITEM_REL_PRICE = ".k-text-color--subdued"; // Last one usually
-
-  // Search
-  static SEARCH_ARTICLE = "article";
-  static SEARCH_ITEM_NAME = "p.k-text-style--title-xxs";
-  static SEARCH_ITEM_SUBTITLE = "p.k-text-color--subdued"; // First one
-  static SEARCH_ITEM_PRICE = "span.k-text--weight-bold.k-text-color--default";
-  static SEARCH_ITEM_REL_PRICE = "p.k-text-color--subdued"; // Last one
-
-  // Navigation
-  static NEXT_PAGE = "Neste side";
-  static PREV_PAGE = "Forrige side";
-
-  // Actions
-  static ADD_TO_CART_LABEL = "Legg til i handlekurven";
-  static REMOVE_FROM_CART_LABEL = "Fjern fra handlekurven";
-
-  // Recipes
-  static RECIPE_GRID_LINK = 'a[href^="/no/recipes/"]';
-  static FILTER_NAV = 'nav[aria-label="Liste over filtre"]';
-  static FILTER_CATEGORY_CONTAINER = "div.k-py-2";
-  static FILTER_LABEL = "label";
-  static FILTER_CHECKBOX = "input[type='checkbox']";
-  static FILTER_NAME = "span.k-text-style--body-m";
-  static FILTER_COUNT = "span.k-pill";
-  static RECIPE_PORTIONS_SELECT = "label:has-text('Porsjoner') ~ button";
-  static RECIPE_ADD_TO_CART_BUTTON = "button[data-testid='add-to-cart-button']";
-}
+import fs from "fs";
 
 export class OdaClient {
   static BASE_URL = "https://oda.com/no";
-  static API_CART_URL_PART = "tienda-web-api/v1/cart/items/";
+  static API_BASE = "https://oda.com";
+  static CART_API = "https://oda.com/tienda-web-api/v1/cart/";
+  static CART_ITEMS_API = "https://oda.com/tienda-web-api/v1/cart/items/";
 
-  constructor(public page: Page) {}
+  private cookies: Record<string, string> = {};
+  private readonly headers: Record<string, string>;
 
-  async getCartContents(): Promise<CartItem[]> {
-    const response = await this.page.goto(`${OdaClient.BASE_URL}/cart/`);
-    if (response?.status() === 425) {
-      throw new Error("Server returned 425 Too Early. Please try again later.");
-    }
-    await expect(this.page).toHaveTitle(Selectors.CART_TITLE);
-
-    // Wait for either cart items or empty/info message
-    try {
-      await Promise.race([
-        this.page
-          .getByText("Sjekk handlekurven før du går til kassen og betaler.")
-          .waitFor({ timeout: 1000 }),
-        this.page
-          .getByText("Du har ingen varer i handlekurven.")
-          .waitFor({ timeout: 1000 }),
-        this.page.getByRole("article").first().waitFor({ timeout: 1000 }),
-      ]);
-    } catch {
-      // Timeout waiting for cart state, proceeding
-    }
-
-    const articles = await this.page.getByRole("article").all();
-    return Promise.all(
-      articles.map((article, i) => this._extractCartItem(i, article)),
-    );
-  }
-
-  private async _extractCartItem(
-    index: number,
-    article: Locator,
-  ): Promise<CartItem> {
-    const timeout = 2000;
-    const nameTask = article
-      .locator(Selectors.CART_ITEM_NAME)
-      .textContent({ timeout })
-      .catch(() => null);
-    const subtitleTask = this._safeText(
-      article.locator(Selectors.CART_ITEM_SUBTITLE).first(),
-      timeout,
-    );
-    const quantityTask = article
-      .getByTestId("cart-buttons-quantity")
-      .getAttribute("value", { timeout })
-      .catch(() => null);
-    const priceTask = article
-      .locator(Selectors.CART_ITEM_PRICE)
-      .last()
-      .textContent({ timeout })
-      .catch(() => null);
-    const relPriceTask = article
-      .locator(Selectors.CART_ITEM_REL_PRICE)
-      .last()
-      .textContent({ timeout })
-      .catch(() => null);
-
-    const [name, subtitle, quantityStr, priceStr, relPriceStr] =
-      await Promise.all([
-        nameTask,
-        subtitleTask,
-        quantityTask,
-        priceTask,
-        relPriceTask,
-      ]);
-
-    const quantity = quantityStr ? parseInt(quantityStr, 10) : 0;
-    const price = Parsers.parsePrice(priceStr);
-    const [relPrice, relUnit] = Parsers.parseRelativePrice(relPriceStr);
-
-    return {
-      index,
-      name: name?.trim() || "Unknown Product",
-      subtitle: subtitle?.trim() || "",
-      quantity,
-      price,
-      relative_price: relPrice,
-      relative_price_unit: relUnit,
+  constructor(private cookiePath: string) {
+    this.headers = {
+      "User-Agent":
+        "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept-Language": "no,nb;q=0.9,en;q=0.8",
     };
+    this.loadCookies();
   }
 
-  async searchProducts(query: string): Promise<ProductPage> {
-    const q = new URLSearchParams({ q: query });
-    const response = await this.page.goto(`${OdaClient.BASE_URL}/search/products/?${q}`);
-    if (response?.status() === 425) {
-      throw new Error("Server returned 425 Too Early. Please try again later.");
-    }
-    await this.page.waitForLoadState("networkidle");
-    return this._scrapeSearchResults();
-  }
+  // --- Cookie management ---
 
-  async searchNextPage(): Promise<ProductPage> {
-    const result = await this._navigate(
-      Selectors.NEXT_PAGE,
-      () => this._scrapeSearchResults(),
-      () => this._getProductState(),
-    );
-    return result || { page_url: this.page.url(), items: [] };
-  }
-
-  async searchPreviousPage(): Promise<ProductPage> {
-    const result = await this._navigate(
-      Selectors.PREV_PAGE,
-      () => this._scrapeSearchResults(),
-      () => this._getProductState(),
-    );
-    return result || { page_url: this.page.url(), items: [] };
-  }
-
-  async searchRecipesNext(): Promise<RecipePage> {
-    const result = await this._navigate(
-      Selectors.NEXT_PAGE,
-      () => this._scrapeRecipesPage(),
-      () => this._getRecipeState(),
-    );
-    return result || { page_url: this.page.url(), filters: [], items: [] };
-  }
-
-  async searchRecipesPrevious(): Promise<RecipePage> {
-    const result = await this._navigate(
-      Selectors.PREV_PAGE,
-      () => this._scrapeRecipesPage(),
-      () => this._getRecipeState(),
-    );
-    return result || { page_url: this.page.url(), filters: [], items: [] };
-  }
-
-  private async _getProductState(): Promise<string> {
-    const p = await this._scrapeSearchResults();
-    return p.items.length > 0 ? p.items[0].name : "";
-  }
-
-  private async _getRecipeState(): Promise<string> {
-    const p = await this._scrapeRecipesPage();
-    return p.items.length > 0 ? p.items[0].name : "";
-  }
-
-  private async _navigate<T>(
-    label: string,
-    scraperFunc: () => Promise<T>,
-    stateExtractor?: () => Promise<string>,
-  ): Promise<T | null> {
+  private loadCookies() {
     try {
-      const button = this.page.getByLabel(label);
-      if (await button.isVisible()) {
-        let previousState = "";
-        if (stateExtractor) {
-          try {
-            previousState = await stateExtractor();
-          } catch {
-            // ignore
+      if (!fs.existsSync(this.cookiePath)) return;
+      const raw = JSON.parse(fs.readFileSync(this.cookiePath, "utf-8"));
+
+      if (Array.isArray(raw)) {
+        // Playwright format: [{name, value, domain, ...}, ...]
+        for (const c of raw) {
+          if (c.name && c.value !== undefined) {
+            this.cookies[c.name] = String(c.value);
           }
         }
-
-        const currentUrl = this.page.url();
-        await button.click();
-
-        try {
-          await this.page.waitForURL((u) => u.toString() !== currentUrl, {
-            timeout: 5000,
-          });
-        } catch {
-          // Proceed to network idle
+      } else if (typeof raw === "object" && raw !== null) {
+        // Simple format: {name: value, ...}
+        for (const [k, v] of Object.entries(raw)) {
+          this.cookies[k] = String(v);
         }
-
-        await this.page.waitForLoadState("networkidle");
-
-        if (stateExtractor && previousState) {
-          try {
-            const start = Date.now();
-            while (Date.now() - start < 5000) {
-              const currentState = await stateExtractor();
-              if (currentState !== previousState) break;
-              await new Promise((r) => setTimeout(r, 200));
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        await this.page.waitForTimeout(500);
-        return await scraperFunc();
       }
-    } catch (_e) {
-      console.log(`Navigation button '${label}' not usable.`);
+    } catch {
+      // Ignore corrupt cookie files
+    }
+  }
+
+  saveCookies() {
+    fs.writeFileSync(this.cookiePath, JSON.stringify(this.cookies, null, 2));
+  }
+
+  private updateCookies(response: Response) {
+    const setCookies = response.headers.getSetCookie();
+    for (const header of setCookies) {
+      const parts = header.split(";")[0];
+      const eq = parts.indexOf("=");
+      if (eq > 0) {
+        const name = parts.substring(0, eq).trim();
+        const value = parts.substring(eq + 1).trim();
+        this.cookies[name] = value;
+      }
+    }
+  }
+
+  private cookieHeader(): string {
+    return Object.entries(this.cookies)
+      .map(([k, v]) => `${k}=${v}`)
+      .join("; ");
+  }
+
+  getCsrfToken(): string | null {
+    return this.cookies["csrftoken"] || null;
+  }
+
+  // --- Core HTTP methods ---
+
+  async get(url: string): Promise<Response> {
+    const response = await fetch(url, {
+      headers: {
+        ...this.headers,
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Cookie: this.cookieHeader(),
+      },
+      redirect: "manual",
+    });
+    this.updateCookies(response);
+    return response;
+  }
+
+  async getFollowRedirects(url: string): Promise<Response> {
+    const response = await fetch(url, {
+      headers: {
+        ...this.headers,
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Cookie: this.cookieHeader(),
+      },
+      redirect: "follow",
+    });
+    this.updateCookies(response);
+    return response;
+  }
+
+  private async apiPost(
+    url: string,
+    body: any,
+    referer?: string,
+  ): Promise<Response> {
+    const csrf = this.getCsrfToken();
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...this.headers,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Cookie: this.cookieHeader(),
+        Origin: OdaClient.API_BASE,
+        Referer: referer || `${OdaClient.BASE_URL}/`,
+        ...(csrf ? { "X-CSRFToken": csrf } : {}),
+      },
+      body: JSON.stringify(body),
+      redirect: "manual",
+    });
+    this.updateCookies(response);
+    return response;
+  }
+
+  private async apiGet(url: string): Promise<Response> {
+    const csrf = this.getCsrfToken();
+    const response = await fetch(url, {
+      headers: {
+        ...this.headers,
+        Accept: "application/json",
+        Cookie: this.cookieHeader(),
+        Origin: OdaClient.API_BASE,
+        Referer: `${OdaClient.BASE_URL}/`,
+        ...(csrf ? { "X-CSRFToken": csrf } : {}),
+      },
+      redirect: "follow",
+    });
+    this.updateCookies(response);
+    return response;
+  }
+
+  private async apiDelete(url: string): Promise<Response> {
+    const csrf = this.getCsrfToken();
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        ...this.headers,
+        Accept: "application/json",
+        Cookie: this.cookieHeader(),
+        Origin: OdaClient.API_BASE,
+        Referer: `${OdaClient.BASE_URL}/cart/`,
+        ...(csrf ? { "X-CSRFToken": csrf } : {}),
+      },
+      redirect: "manual",
+    });
+    this.updateCookies(response);
+    return response;
+  }
+
+  // --- HTML parsing ---
+
+  private extractNextData(html: string): any | null {
+    const match = html.match(
+      /<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s,
+    );
+    if (!match) return null;
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      return null;
+    }
+  }
+
+  private extractJsonLd(html: string): any[] {
+    const results: any[] = [];
+    const regex = /<script type="application\/ld\+json">(.*?)<\/script>/gs;
+    let m;
+    while ((m = regex.exec(html)) !== null) {
+      try {
+        results.push(JSON.parse(m[1]));
+      } catch {
+        // skip malformed
+      }
+    }
+    return results;
+  }
+
+  async fetchNextData(url: string): Promise<any | null> {
+    const response = await this.getFollowRedirects(url);
+    if (response.status === 425) {
+      throw new Error(
+        "Server returned 425 Too Early. Please try again later.",
+      );
+    }
+    const html = await response.text();
+    return this.extractNextData(html);
+  }
+
+  async fetchJsonLd(url: string): Promise<any[]> {
+    const response = await this.getFollowRedirects(url);
+    if (response.status === 425) {
+      throw new Error(
+        "Server returned 425 Too Early. Please try again later.",
+      );
+    }
+    const html = await response.text();
+    return this.extractJsonLd(html);
+  }
+
+  /**
+   * Find a specific query result from dehydrated React Query state.
+   * The __NEXT_DATA__ contains queries keyed by queryKey arrays.
+   */
+  private findDehydratedQuery(nextData: any, keyPrefix: string): any | null {
+    const queries =
+      nextData?.props?.pageProps?.dehydratedState?.queries || [];
+    for (const q of queries) {
+      const key = q.queryKey;
+      if (Array.isArray(key) && key[0] === keyPrefix) {
+        return q.state?.data ?? null;
+      }
     }
     return null;
   }
 
-  private async _scrapeSearchResults(): Promise<ProductPage> {
-    interface ScrapedItem {
-      name?: string | null;
-      subtitle?: string | null;
-      price?: string | null;
-      rel_price?: string | null;
-    }
+  // --- Dump helper (for CLI discovery) ---
 
-    let items: ScrapedItem[] = [];
-    try {
-      items = await this.page.evaluate(
-        ({ articleSelector, selectors }) => {
-          const articles = document.querySelectorAll(articleSelector);
-          return Array.from(articles).map((article) => {
-            const relPrices = article.querySelectorAll(selectors.rel_price);
-            const nameEl = article.querySelector(selectors.name) as HTMLElement;
-            const subEl = article.querySelector(
-              selectors.subtitle,
-            ) as HTMLElement;
-            const priceEl = article.querySelector(
-              selectors.price,
-            ) as HTMLElement;
-            const relPriceEl =
-              relPrices.length > 0
-                ? (relPrices[relPrices.length - 1] as HTMLElement)
-                : null;
+  async dump(url: string): Promise<{
+    nextData: any | null;
+    jsonLd: any[];
+    headers: Record<string, string>;
+    status: number;
+    finalUrl: string;
+  }> {
+    const response = await this.getFollowRedirects(url);
+    const html = await response.text();
 
-            return {
-              name: nameEl?.innerText,
-              subtitle: subEl?.innerText,
-              price: priceEl?.innerText,
-              rel_price: relPriceEl?.innerText,
-            };
-          });
-        },
-        {
-          articleSelector: Selectors.SEARCH_ARTICLE,
-          selectors: {
-            name: Selectors.SEARCH_ITEM_NAME,
-            subtitle: Selectors.SEARCH_ITEM_SUBTITLE,
-            price: Selectors.SEARCH_ITEM_PRICE,
-            rel_price: Selectors.SEARCH_ITEM_REL_PRICE,
-          },
-        },
-      );
-    } catch (e) {
-      console.warn("Failed to batch scrape search results", e);
-      return { page_url: this.page.url(), items: [] };
-    }
-
-    const results: SearchResult[] = [];
-    items.forEach((item) => {
-      if (!item.name) return;
-      const price = Parsers.parsePrice(item.price || null);
-      const [relPrice, relUnit] = Parsers.parseRelativePrice(
-        item.rel_price || null,
-      );
-
-      results.push({
-        index: results.length,
-        name: item.name.trim(),
-        subtitle: item.subtitle?.trim() || "",
-        price,
-        relative_price: relPrice,
-        relative_price_unit: relUnit,
-      });
+    const responseHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
     });
 
-    return { page_url: this.page.url(), items: results };
+    return {
+      nextData: this.extractNextData(html),
+      jsonLd: this.extractJsonLd(html),
+      headers: responseHeaders,
+      status: response.status,
+      finalUrl: response.url,
+    };
   }
 
-  async searchRecipes(query?: string | null): Promise<RecipePage> {
-    let url = `${OdaClient.BASE_URL}/recipes/all/`;
-    if (query) {
-      const q = new URLSearchParams({ q: query });
-      url += `?${q}`;
-    }
-    const response = await this.page.goto(url);
-    if (response?.status() === 425) {
-      throw new Error("Server returned 425 Too Early. Please try again later.");
-    }
-    return this._scrapeRecipesPage();
+  // --- Product methods ---
+
+  async searchProducts(query: string, page = 1): Promise<ProductPage> {
+    const url = `${OdaClient.BASE_URL}/search/products/?q=${encodeURIComponent(query)}${page > 1 ? `&page=${page}` : ""}`;
+    const nextData = await this.fetchNextData(url);
+    return this.parseProductPage(url, nextData);
   }
 
-  private async _scrapeRecipesPage(): Promise<RecipePage> {
-    const filters = await this._scrapeRecipeFilters();
-    const recipes = await this._scrapeRecipes();
-    return { page_url: this.page.url(), filters, items: recipes };
-  }
-
-  private async _scrapeRecipeFilters(): Promise<RecipeFilter[]> {
-    const filters: RecipeFilter[] = [];
-    const nav = this.page.locator(Selectors.FILTER_NAV);
-    if (!(await nav.isVisible())) return [];
-
-    const categoryContainers = await nav
-      .locator(Selectors.FILTER_CATEGORY_CONTAINER)
-      .all();
-    for (const container of categoryContainers) {
-      try {
-        const titleEl = container.locator("span.k-text--weight-bold").first();
-        if (!(await titleEl.isVisible())) continue;
-        let category = await titleEl.textContent();
-        category = category ? category.trim() : "Unknown";
-
-        const labels = await container.locator(Selectors.FILTER_LABEL).all();
-        for (const label of labels) {
-          try {
-            const inp = label.locator(Selectors.FILTER_CHECKBOX);
-            const idAttr = await inp.getAttribute("id", { timeout: 100 });
-            const nameEl = label.locator(Selectors.FILTER_NAME);
-            const name = await nameEl.textContent({ timeout: 100 });
-            const countEl = label.locator(Selectors.FILTER_COUNT);
-            const countStr = (await countEl.isVisible())
-              ? await countEl.textContent({ timeout: 100 })
-              : "0";
-
-            filters.push({
-              id: idAttr || "",
-              name: name ? name.trim() : "",
-              count: countStr ? parseInt(countStr.trim(), 10) : 0,
-              category,
-            });
-          } catch {
-            // Skip
-          }
-        }
-      } catch {
-        // Skip
-      }
-    }
-    return filters;
-  }
-
-  private _isValidRecipeUrl(url: string): boolean {
-    const parts = url.replace(/^\//, "").replace(/\/$/, "").split("/");
-    if (parts.length < 3) return false;
-    if (parts[parts.length - 2] !== "recipes") return false;
-    return /^\d/.test(parts[parts.length - 1]);
-  }
-
-  private async _scrapeRecipes(): Promise<Recipe[]> {
-    interface ScrapedRecipe {
-      url: string | null;
-      text: string | null;
+  private parseProductPage(url: string, nextData: any): ProductPage {
+    if (!nextData) {
+      return { page_url: url, items: [], has_more: false };
     }
 
-    let items: ScrapedRecipe[] = [];
     try {
-      items = await this.page.evaluate((selector) => {
-        const elements = Array.from(document.querySelectorAll(selector));
-        return elements.map((el) => ({
-          url: el.getAttribute("href"),
-          text: (el as HTMLElement).innerText,
-        }));
-      }, Selectors.RECIPE_GRID_LINK);
+      // Data is in dehydrated React Query state under "searchpageresponse"
+      const data = this.findDehydratedQuery(nextData, "searchpageresponse");
+      if (!data || !data.items) {
+        return { page_url: url, items: [], has_more: false };
+      }
+
+      const has_more = data.attributes?.hasMoreItems === true;
+
+      const items: SearchResult[] = [];
+
+      for (const item of data.items) {
+        if (item.type !== "product") continue;
+        const a = item.attributes;
+        if (!a) continue;
+
+        const id = a.id || item.id;
+        const name = a.fullName || a.name || "Unknown";
+        const subtitle = a.nameExtra || "";
+        const price = parseFloat(a.grossPrice) || 0;
+        const unitPrice = parseFloat(a.grossUnitPrice) || 0;
+        const unitPriceUnit = a.unitPriceQuantityAbbreviation || "";
+
+        items.push({
+          id,
+          name,
+          subtitle,
+          price,
+          relative_price: unitPrice,
+          relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
+        });
+      }
+
+      return { page_url: url, items, has_more };
     } catch (e) {
-      console.warn("Failed to batch scrape recipes", e);
+      console.error("Failed to parse product page", e);
+      return { page_url: url, items: [], has_more: false };
+    }
+  }
+
+  // --- Cart methods ---
+
+  async getCartContents(): Promise<CartItem[]> {
+    // Cart data is not in __NEXT_DATA__, use the REST API directly
+    const response = await this.apiGet(OdaClient.CART_API);
+    if (response.status === 425) {
+      throw new Error(
+        "Server returned 425 Too Early. Please try again later.",
+      );
+    }
+    if (!response.ok) {
       return [];
     }
 
-    const recipes: Recipe[] = [];
-    const seenUrls = new Set<string>();
+    try {
+      const data = await response.json();
+      return this.parseCartApi(data);
+    } catch (e) {
+      console.error("Failed to parse cart API response", e);
+      return [];
+    }
+  }
 
-    for (const item of items) {
-      if (!item.url || seenUrls.has(item.url)) continue;
-      if (!this._isValidRecipeUrl(item.url)) continue;
+  private parseCartApi(data: any): CartItem[] {
+    const items: CartItem[] = [];
 
-      seenUrls.add(item.url);
-      const lines = (item.text || "")
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l);
-      const name = lines.length > 0 ? lines[0] : "Unknown Recipe";
-      recipes.push({
-        index: recipes.length,
+    // Items can be at top-level or nested under groups
+    const rawItems: any[] = data.items || [];
+    for (const group of data.groups || []) {
+      rawItems.push(...(group.items || []));
+    }
+
+    for (const item of rawItems) {
+      const product = item.product || {};
+      const productId = product.id;
+      const name = product.full_name || product.name || "Unknown Product";
+      const subtitle = product.name_extra || "";
+      const quantity = item.quantity || 1;
+      const price = parseFloat(product.gross_price) || 0;
+      const unitPrice = parseFloat(product.gross_unit_price) || 0;
+      const unitPriceUnit =
+        product.unit_price_quantity_abbreviation || "";
+
+      items.push({
+        id: productId,
         name,
+        subtitle,
+        quantity,
+        price,
+        relative_price: unitPrice,
+        relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
       });
     }
-    return recipes;
+
+    return items;
   }
 
-  async searchRecipesFilter(filterIds: string[]): Promise<RecipePage> {
-    for (const fid of filterIds) {
-      try {
-        const loc = this.page.locator(`input[id='${fid}']`);
-        if (await loc.isVisible()) {
-          await loc.click();
-          await this.page.waitForLoadState("networkidle");
-          await this.page.waitForTimeout(500);
-        } else {
-          console.warn(`Filter ${fid} not found.`);
+  async addToCart(productId: number, count = 1): Promise<void> {
+    const response = await this.apiPost(
+      OdaClient.CART_ITEMS_API,
+      { items: [{ product_id: productId, quantity: count }] },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Add to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+    }
+  }
+
+  async removeFromCart(productId: number, count = 1): Promise<void> {
+    const response = await this.apiPost(
+      OdaClient.CART_ITEMS_API,
+      { items: [{ product_id: productId, quantity: -count }] },
+      `${OdaClient.BASE_URL}/cart/`,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Remove from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+    }
+  }
+
+  async clearCart(): Promise<void> {
+    const response = await this.apiPost(
+      `${OdaClient.API_BASE}/tienda-web-api/v1/cart/clear/`,
+      {},
+      `${OdaClient.BASE_URL}/cart/`,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Clear cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+    }
+  }
+
+  // --- Recipe methods ---
+
+  async searchRecipes(query?: string | null, page = 1, filterIds?: string[]): Promise<RecipePage> {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (page > 1) params.set("page", String(page));
+    if (filterIds?.length) params.set("filters", filterIds.join(","));
+    const qs = params.toString();
+    const url = `${OdaClient.BASE_URL}/recipes/all/${qs ? `?${qs}` : ""}`;
+    const nextData = await this.fetchNextData(url);
+    return this.parseRecipePage(url, nextData);
+  }
+
+  private parseRecipePage(url: string, nextData: any): RecipePage {
+    if (!nextData) {
+      return { page_url: url, filters: [], items: [], has_more: false };
+    }
+
+    try {
+      // Data is in dehydrated React Query state under "searchresponse"
+      const data = this.findDehydratedQuery(nextData, "searchresponse");
+      if (!data || !data.items) {
+        return { page_url: url, filters: [], items: [], has_more: false };
+      }
+
+      const has_more = data.attributes?.hasMoreItems === true;
+
+      // Filters: data.filters[] can be filtergroup or flat filter
+      const filters: RecipeFilter[] = [];
+      for (const f of data.filters || []) {
+        if (f.type === "filtergroup" && f.items) {
+          const category = f.displayName || f.name || "Unknown";
+          for (const opt of f.items) {
+            filters.push({
+              id: `${opt.name}:${opt.value}`,
+              name: opt.displayValue || opt.value || "",
+              count: opt.count || 0,
+              category,
+            });
+          }
+        } else if (f.type === "filter") {
+          filters.push({
+            id: `${f.name}:${f.value}`,
+            name: f.displayValue || f.value || "",
+            count: f.count || 0,
+            category: "Filter",
+          });
         }
-      } catch (e) {
-        console.warn(`Failed to toggle filter ${fid}`, e);
       }
+
+      // Recipe items
+      const items: Recipe[] = [];
+
+      for (const item of data.items) {
+        if (item.type !== "recipe") continue;
+        const a = item.attributes;
+        if (!a) continue;
+
+        const recipeId = a.id || item.id;
+        const name = a.title || "Unknown Recipe";
+        const imageUrl = a.featureImageUrl || undefined;
+        const duration = a.cookingDurationString || undefined;
+        const difficulty = a.difficultyString || a.difficulty || undefined;
+
+        items.push({
+          id: recipeId,
+          name,
+          image_url: imageUrl,
+          duration,
+          difficulty,
+        });
+      }
+
+      return { page_url: url, filters, items, has_more };
+    } catch (e) {
+      console.error("Failed to parse recipe page", e);
+      return { page_url: url, filters: [], items: [], has_more: false };
     }
-    return this._scrapeRecipesPage();
   }
 
-  async getRecipeUrl(index: number): Promise<string | null> {
-    const links = await this.page.locator(Selectors.RECIPE_GRID_LINK).all();
-    const seenUrls = new Set<string>();
-    let validCount = 0;
-    let targetUrl: string | null = null;
+  private async getRecipeData(recipeId: number): Promise<any> {
+    const url = `${OdaClient.BASE_URL}/recipes/${recipeId}`;
+    const nextData = await this.fetchNextData(url);
+    if (!nextData) {
+      throw new Error(`Could not load recipe page for ID ${recipeId}`);
+    }
+    const data = this.findDehydratedQuery(nextData, "get-recipe-detail");
+    if (!data) {
+      throw new Error(`Could not find recipe data for ID ${recipeId}`);
+    }
+    return data;
+  }
 
-    for (const link of links) {
-      const url = await link.getAttribute("href");
-      if (!url || seenUrls.has(url)) continue;
-      if (!this._isValidRecipeUrl(url)) continue;
+  async getRecipeDetails(recipeId: number): Promise<RecipeDetail> {
+    const data = await this.getRecipeData(recipeId);
+    return this.createRecipeDetailFromApi(data);
+  }
 
-      if (validCount === index) {
-        targetUrl = url;
-        break;
-      }
-      seenUrls.add(url);
-      validCount++;
+  private createRecipeDetailFromApi(data: any): RecipeDetail {
+    const name = data.title || "Unknown";
+    const description = data.lead || "";
+    const imageUrl = data.featureImageUrl || undefined;
+
+    // Ingredients from ingredientsDisplayList
+    const ingredients: string[] = (data.ingredientsDisplayList || []).map(
+      (ing: any) => {
+        const qty = parseFloat(ing.displayQuantity) || 0;
+        const unit = ing.displayUnit || "";
+        const title = ing.title || "";
+        // Format as "250 g Mozzarella, fersk" or "1 stk Pizzabunn"
+        const qtyStr = qty % 1 === 0 ? String(Math.round(qty)) : String(qty);
+        return `${qtyStr} ${unit} ${title}`.trim();
+      },
+    );
+
+    // Instructions
+    const instructions: string[] = (
+      data.instructions?.instructions || []
+    ).map((step: any) => step.text || "");
+
+    return { name, description, ingredients, instructions, image_url: imageUrl };
+  }
+
+  async addRecipeToCart(
+    recipeId: number,
+    portions: number,
+  ): Promise<void> {
+    const data = await this.getRecipeData(recipeId);
+    const ingredients: any[] = data.ingredients || [];
+    const items = ingredients
+      .filter((ing: any) => ing.product?.id)
+      .map((ing: any) => ({
+        product_id: ing.product.id,
+        quantity: (parseFloat(ing.portionQuantity) || 0) * portions,
+        from_recipe_id: recipeId,
+        from_recipe_portions: portions,
+      }));
+
+    const response = await this.apiPost(
+      `${OdaClient.CART_ITEMS_API}?group_by=recipes`,
+      { items },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Add recipe to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+    }
+  }
+
+  async removeRecipeFromCart(recipeId: number): Promise<void> {
+    const response = await this.apiPost(
+      `${OdaClient.CART_ITEMS_API}?group_by=recipes`,
+      { items: [{ recipe_id: recipeId, quantity: -1, delete: true }] },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Remove recipe from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+    }
+  }
+
+  // --- Auth methods ---
+
+  async login(email: string, password: string): Promise<boolean> {
+    // First GET the login page to get CSRF token
+    await this.getFollowRedirects(`${OdaClient.BASE_URL}/user/login/`);
+
+    const response = await this.apiPost(
+      `${OdaClient.API_BASE}/tienda-web-api/v1/user/login/`,
+      { username: email, password },
+      `${OdaClient.BASE_URL}/user/login/`,
+    );
+
+    if (response.ok) {
+      this.saveCookies();
+      return true;
     }
 
-    if (targetUrl) {
-      return `${OdaClient.BASE_URL.replace("/no", "")}${targetUrl}`;
+    return false;
+  }
+
+  async checkUser(): Promise<string | null> {
+    // Use dehydrated query "user" from any page
+    const nextData = await this.fetchNextData(`${OdaClient.BASE_URL}/cart/`);
+    return this.extractUserName(nextData);
+  }
+
+  private extractUserName(nextData: any): string | null {
+    if (!nextData) return null;
+    try {
+      const user = this.findDehydratedQuery(nextData, "user");
+      if (user) {
+        const name =
+          `${user.firstName || ""} ${user.lastName || ""}`.trim();
+        return name || user.email || null;
+      }
+    } catch {
+      // ignore
     }
     return null;
-  }
-
-  async openRecipeByIndex(index: number): Promise<RecipeDetail> {
-    const fullUrl = await this.getRecipeUrl(index);
-    if (!fullUrl) {
-      throw new Error(`Could not resolve recipe index ${index} to a URL`);
-    }
-    const response = await this.page.goto(fullUrl);
-    if (response?.status() === 425) {
-      throw new Error("Server returned 425 Too Early. Please try again later.");
-    }
-    return this._parseRecipeJsonLd();
-  }
-
-  async scrapeRecipeDetails(): Promise<RecipeDetail> {
-    return this._parseRecipeJsonLd();
-  }
-
-  private async _parseRecipeJsonLd(): Promise<RecipeDetail> {
-    const jsonLdScripts = await this.page
-      .locator('script[type="application/ld+json"]')
-      .all();
-    let recipeData: any = {};
-
-    for (const script of jsonLdScripts) {
-      const content = await script.textContent();
-      if (!content) continue;
-      try {
-        const data = JSON.parse(content);
-        const found = this._findRecipeInJsonLd(data);
-        if (found) {
-          recipeData = found;
-          break;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (Object.keys(recipeData).length === 0) {
-      throw new Error("Could not find Recipe JSON-LD data on page");
-    }
-
-    return this._createRecipeDetail(recipeData);
-  }
-
-  private _findRecipeInJsonLd(data: any): any | null {
-    if (typeof data === "object" && data["@type"] === "Recipe") return data;
-    if (typeof data === "object" && Array.isArray(data["@graph"])) {
-      for (const item of data["@graph"]) {
-        if (item["@type"] === "Recipe") return item;
-      }
-    }
-    return null;
-  }
-
-  private _createRecipeDetail(recipeData: any): RecipeDetail {
-    let imageUrl: string | undefined = undefined;
-    const image = recipeData.image;
-    if (
-      Array.isArray(image) &&
-      image.length > 0 &&
-      typeof image[0] === "string"
-    ) {
-      imageUrl = image[0];
-    } else if (typeof image === "string") {
-      imageUrl = image;
-    }
-
-    return {
-      name: String(recipeData.name || "Unknown"),
-      description: String(recipeData.description || ""),
-      ingredients: (recipeData.recipeIngredient || []).map(String),
-      instructions: (recipeData.recipeInstructions || []).map((step: any) =>
-        typeof step === "object" ? step.text || "" : String(step),
-      ),
-      image_url: imageUrl,
-    };
-  }
-
-  async addRecipeByIndex(index: number, portions: number): Promise<boolean> {
-    const fullUrl = await this.getRecipeUrl(index);
-    if (!fullUrl) {
-      console.warn(`Could not resolve recipe index ${index} to a URL`);
-      return false;
-    }
-    const response = await this.page.goto(fullUrl);
-    if (response?.status() === 425) {
-      throw new Error("Server returned 425 Too Early. Please try again later.");
-    }
-    return this.addCurrentRecipe(portions);
-  }
-
-  async addCurrentRecipe(portions: number): Promise<boolean> {
-    try {
-      const portionsSelector = this.page.locator(
-        Selectors.RECIPE_PORTIONS_SELECT,
-      );
-      await expect(portionsSelector).toBeVisible({ timeout: 5000 });
-    } catch {
-      console.warn(`Could not verify recipe page loaded at ${this.page.url()}`);
-      return false;
-    }
-
-    try {
-      const portionsSelector = this.page.locator(
-        Selectors.RECIPE_PORTIONS_SELECT,
-      );
-      const menuId = await portionsSelector.getAttribute("aria-controls");
-      await portionsSelector.click();
-
-      let option: Locator | null = null;
-      if (menuId) {
-        try {
-          const menu = this.page.locator(`#${menuId}`);
-          await expect(menu).toBeVisible({ timeout: 2000 });
-          const potential = menu.getByText(String(portions), { exact: true });
-          await expect(potential).toBeVisible({ timeout: 1000 });
-          option = potential;
-        } catch {
-          option = null;
-        }
-      }
-
-      if (!option) {
-        option = this.page
-          .getByText(String(portions), { exact: true })
-          .locator("visible=true")
-          .last();
-      }
-
-      await expect(option).toBeVisible({ timeout: 3000 });
-      await option.click({ force: true });
-      await this.page.waitForTimeout(100);
-    } catch (e) {
-      console.warn(`Failed to set portions to ${portions}`, e);
-      return false;
-    }
-
-    try {
-      const addButton = this.page.locator(Selectors.RECIPE_ADD_TO_CART_BUTTON);
-      await expect(addButton).toBeEnabled();
-
-      const responsePromise = this.page.waitForResponse(
-        (r) =>
-          r.url().includes(OdaClient.API_CART_URL_PART) &&
-          [200, 201, 204, 425].includes(r.status()),
-        { timeout: 5000 },
-      );
-      await addButton.click();
-      const response = await responsePromise;
-      if (response.status() === 425) {
-        throw new Error("Server returned 425 Too Early. Please try again later.");
-      }
-      return true;
-    } catch (e) {
-      console.error("Failed to add recipe to cart", e);
-      return false;
-    }
-  }
-
-  async addToCart(index: number): Promise<boolean> {
-    return this._modifyCart(index, Selectors.ADD_TO_CART_LABEL);
-  }
-
-  async removeFromCart(index: number): Promise<boolean> {
-    return this._modifyCart(index, Selectors.REMOVE_FROM_CART_LABEL);
-  }
-
-  private async _modifyCart(index: number, label: string): Promise<boolean> {
-    const articles = await this.page.getByRole("article").all();
-    if (index >= articles.length) {
-      console.warn(`Index ${index} out of bounds`);
-      return false;
-    }
-
-    const article = articles[index];
-    await article.scrollIntoViewIfNeeded();
-    const button = article.getByLabel(label);
-
-    try {
-      await button.waitFor({ state: "visible", timeout: 1000 });
-      await expect(button).toBeEnabled();
-    } catch {
-      console.warn(`Button '${label}' unavailable for item ${index}`);
-      return false;
-    }
-
-    try {
-      const responsePromise = this.page.waitForResponse(
-        (r) =>
-          r.url().includes(OdaClient.API_CART_URL_PART) &&
-          [200, 201, 204, 425].includes(r.status()),
-        { timeout: 2000 },
-      );
-      await button.click();
-      const response = await responsePromise;
-      if (response.status() === 425) {
-        throw new Error("Server returned 425 Too Early. Please try again later.");
-      }
-      await this.page.waitForTimeout(100);
-      return true;
-    } catch (e) {
-      if (e instanceof Error && e.message.includes("425")) throw e;
-      console.error(`API interaction failed for '${label}'`, e);
-      return false;
-    }
-  }
-
-  private async _safeText(
-    locator: Locator,
-    timeoutMs: number = 30000,
-  ): Promise<string> {
-    try {
-      return (await locator.textContent({ timeout: timeoutMs })) || "";
-    } catch {
-      return "";
-    }
   }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/gbbirkisson/mcp-oda/compare/0.3.4...0.4.0) (2026-02-10)
+
+
+### Features
+
+* drop playwright ([#14](https://github.com/gbbirkisson/mcp-oda/issues/14)) ([08a848f](https://github.com/gbbirkisson/mcp-oda/commit/08a848ffb780827c51eb168fa00105b42614c8f0))
+
 ## [0.3.4](https://github.com/gbbirkisson/mcp-oda/compare/0.3.3...0.3.4) (2026-02-06)
 
 

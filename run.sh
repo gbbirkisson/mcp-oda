@@ -10,6 +10,25 @@ log() {
   fi
 }
 
+# Bootstrap: install deps / build if needed
+if [ ! -d node_modules ]; then
+  log "node_modules missing, running npm install"
+  if [ "$MCP_ODA_LOG" = "1" ]; then
+    npm install 2>>"$LOG" >>"$LOG"
+  else
+    npm install >/dev/null 2>&1
+  fi
+fi
+
+if [ ! -f dist/index.js ]; then
+  log "dist/index.js missing, running npm run build"
+  if [ "$MCP_ODA_LOG" = "1" ]; then
+    npm run build 2>>"$LOG" >>"$LOG"
+  else
+    npm run build >/dev/null 2>&1
+  fi
+fi
+
 log "=== MCP startup ==="
 log "PWD=$PWD"
 log "args=$*"

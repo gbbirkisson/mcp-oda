@@ -21,7 +21,7 @@ run: build  ## Run the MCP server
 
 .PHONY: inspector
 inspector: build  ## Run mcp inspector for testing
-	npx @modelcontextprotocol/inspector node dist/index.js mcp
+	npx @modelcontextprotocol/inspector ./run.sh
 
 .PHONY: clean
 clean:  ## Clean build artifacts

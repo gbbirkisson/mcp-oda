@@ -4,12 +4,9 @@
   "version": "0.4.1",
   "mcpServers": {
     "oda": {
-      "cwd": "${extensionPath}",
-      "command": "npx",
+      "command": "sh",
       "args": [
-        "-y",
-        ".",
-        "mcp"
+        "${extensionPath}/run.sh"
       ]
     }
   }

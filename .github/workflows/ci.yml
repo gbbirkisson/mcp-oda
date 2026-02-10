@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -27,15 +28,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "18"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright
-        if: matrix.target == 'test'
-        run: npx playwright install chromium
-
       - name: Run ${{ matrix.target }}
         run: npm run ${{ matrix.target }}
+

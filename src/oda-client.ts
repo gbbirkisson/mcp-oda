@@ -12,8 +12,8 @@ import fs from "fs";
 export class OdaClient {
   static BASE_URL = "https://oda.com/no";
   static API_BASE = "https://oda.com";
-  static CART_API = "https://oda.com/tienda-web-api/v1/cart/";
-  static CART_ITEMS_API = "https://oda.com/tienda-web-api/v1/cart/items/";
+  static CART_API = "https://oda.com/api/v1/cart/";
+  static CART_ITEMS_API = "https://oda.com/api/v1/cart/items/";
 
   private cookies: Record<string, string> = {};
   private readonly headers: Record<string, string>;
@@ -395,7 +395,7 @@ export class OdaClient {
 
   async clearCart(): Promise<void> {
     const response = await this.apiPost(
-      `${OdaClient.API_BASE}/tienda-web-api/v1/cart/clear/`,
+      `${OdaClient.API_BASE}/api/v1/cart/clear/`,
       {},
       `${OdaClient.BASE_URL}/cart/`,
     );
@@ -571,7 +571,7 @@ export class OdaClient {
     await this.getFollowRedirects(`${OdaClient.BASE_URL}/user/login/`);
 
     const response = await this.apiPost(
-      `${OdaClient.API_BASE}/tienda-web-api/v1/user/login/`,
+      `${OdaClient.API_BASE}/api/v1/user/login/`,
       { username: email, password },
       `${OdaClient.BASE_URL}/user/login/`,
     );

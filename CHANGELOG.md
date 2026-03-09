@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.4.5](https://github.com/gbbirkisson/mcp-oda/compare/0.4.4...0.4.5) (2026-03-09)
+
+
+### Bug Fixes
+
+* **deps:** update actions/checkout action to v6 ([#28](https://github.com/gbbirkisson/mcp-oda/issues/28)) ([64966da](https://github.com/gbbirkisson/mcp-oda/commit/64966da1d03077d182c3b9deec493bb71df63362))
+* **deps:** update actions/setup-node action to v6 ([#29](https://github.com/gbbirkisson/mcp-oda/issues/29)) ([978cd11](https://github.com/gbbirkisson/mcp-oda/commit/978cd11e2403440c0e6facdda1dea2c2863a51b1))
+* **deps:** update dependency @modelcontextprotocol/sdk to v1.27.0 ([#39](https://github.com/gbbirkisson/mcp-oda/issues/39)) ([f19f4cb](https://github.com/gbbirkisson/mcp-oda/commit/f19f4cb1565dfc3b9e8ceb29254ffa5fb24a9e40))
+* **deps:** update dependency @modelcontextprotocol/sdk to v1.27.1 ([#40](https://github.com/gbbirkisson/mcp-oda/issues/40)) ([c57af80](https://github.com/gbbirkisson/mcp-oda/commit/c57af80ea519ab68eb68e2e934971ae7328724b2))
+* **deps:** update dependency @types/node to v20.19.33 ([#25](https://github.com/gbbirkisson/mcp-oda/issues/25)) ([8b6bf30](https://github.com/gbbirkisson/mcp-oda/commit/8b6bf3017234d6d47a83f0135ca4c2c753e9c6db))
+* **deps:** update dependency @types/node to v25 ([#30](https://github.com/gbbirkisson/mcp-oda/issues/30)) ([5b4b0d2](https://github.com/gbbirkisson/mcp-oda/commit/5b4b0d25622a5b01d10aa8c1577582877505d7e7))
+* **deps:** update dependency @types/node to v25.3.0 ([#36](https://github.com/gbbirkisson/mcp-oda/issues/36)) ([77cf25f](https://github.com/gbbirkisson/mcp-oda/commit/77cf25f8291c41e12263c47aa980c2072bde0378))
+* **deps:** update dependency @types/node to v25.3.1 ([#41](https://github.com/gbbirkisson/mcp-oda/issues/41)) ([8b77046](https://github.com/gbbirkisson/mcp-oda/commit/8b7704626320d68d76453f5a4e7690b16a4581b9))
+* **deps:** update dependency @types/node to v25.3.2 ([#42](https://github.com/gbbirkisson/mcp-oda/issues/42)) ([3e57818](https://github.com/gbbirkisson/mcp-oda/commit/3e57818ddc09f4e4d519f601b7f1066048e882d4))
+* **deps:** update dependency @types/node to v25.3.3 ([#43](https://github.com/gbbirkisson/mcp-oda/issues/43)) ([7f61b04](https://github.com/gbbirkisson/mcp-oda/commit/7f61b0426c2389fa2e96e1621a93355d9fbf13f9))
+* **deps:** update dependency @types/node to v25.3.5 ([#44](https://github.com/gbbirkisson/mcp-oda/issues/44)) ([4d8c05a](https://github.com/gbbirkisson/mcp-oda/commit/4d8c05a3725a5b0b30364b558340877ad69cc654))
+* **deps:** update dependency eslint to v9.39.3 ([#37](https://github.com/gbbirkisson/mcp-oda/issues/37)) ([e55a4cf](https://github.com/gbbirkisson/mcp-oda/commit/e55a4cf7700b6ee0dc450c70669de10b64651564))
+* **deps:** update dependency eslint to v9.39.4 ([#46](https://github.com/gbbirkisson/mcp-oda/issues/46)) ([0c598a6](https://github.com/gbbirkisson/mcp-oda/commit/0c598a6bfe2fefed6bb090ec940d742d6c5f5477))
+* **deps:** update dependency node to v24 ([#32](https://github.com/gbbirkisson/mcp-oda/issues/32)) ([63603c1](https://github.com/gbbirkisson/mcp-oda/commit/63603c1774e973df5a752fdd39ec27c8d97b96b3))
+* **deps:** update dependency typescript-eslint to v8.55.0 ([#26](https://github.com/gbbirkisson/mcp-oda/issues/26)) ([e34531a](https://github.com/gbbirkisson/mcp-oda/commit/e34531ad634c1a515c38d06239cc378bb18876ca))
+* **deps:** update dependency typescript-eslint to v8.56.0 ([#35](https://github.com/gbbirkisson/mcp-oda/issues/35)) ([85f1383](https://github.com/gbbirkisson/mcp-oda/commit/85f1383a22d798d09840181e313c0722570b9d21))
+* **deps:** update dependency typescript-eslint to v8.56.1 ([#38](https://github.com/gbbirkisson/mcp-oda/issues/38)) ([cb60596](https://github.com/gbbirkisson/mcp-oda/commit/cb6059698beaa039edfd47cc40f3864e5ef821c8))
+* **deps:** update dependency vitest to v4 ([#33](https://github.com/gbbirkisson/mcp-oda/issues/33)) ([5cf0335](https://github.com/gbbirkisson/mcp-oda/commit/5cf0335aae1df15041ac1a13d77b93ab1507266c))
+* **deps:** update dependency zod to v4 ([#34](https://github.com/gbbirkisson/mcp-oda/issues/34)) ([3dc97d9](https://github.com/gbbirkisson/mcp-oda/commit/3dc97d9a6f73401b17046268b6777efbe60c1259))
+* update tests after api change ([#48](https://github.com/gbbirkisson/mcp-oda/issues/48)) ([4c4a947](https://github.com/gbbirkisson/mcp-oda/commit/4c4a947a61002b1a57c89e4d3f5097e85579a21b))
+
 ## [0.4.4](https://github.com/gbbirkisson/mcp-oda/compare/0.4.3...0.4.4) (2026-02-10)
 
 

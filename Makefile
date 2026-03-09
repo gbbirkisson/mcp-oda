@@ -15,6 +15,10 @@ build:  ## Build the project
 test:  ## Run tests
 	${NPM} test
 
+.PHONY: test-auth
+test-auth:  ## Run tests with authentication
+	ODA_COOKIE_PATH="$$HOME/.mcp-oda/cookies.json" ${NPM} test
+
 .PHONY: run
 run: build  ## Run the MCP server
 	${NPM} start

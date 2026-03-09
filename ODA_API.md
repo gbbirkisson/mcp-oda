@@ -16,7 +16,7 @@ __NEXT_DATA__.props.pageProps.dehydratedState.queries[]
 
 **URL**: `https://oda.com/no/search/products/?q={query}&page={page}`
 
-**Query key**: `["searchpageresponse", query, {page, size: 40, type: "product", filters: ""}]`
+**Query key**: `[{_id: "mixedSearch", query: {q, page, size: 42, type: "product", filters: "", "only-available": false}}]`
 
 **Data shape**:
 ```json
@@ -81,7 +81,7 @@ __NEXT_DATA__.props.pageProps.dehydratedState.queries[]
 
 **URL**: `https://oda.com/no/recipes/all/?q={query}&page={page}&filters={filters}`
 
-**Query key**: `["searchresponse", query, {type: "plain_recipe", page, size: 48, filters: ""}]`
+**Query key**: `[{_id: "mixedSearch", query: {q, type: "plain_recipe", page, size: 48, filters: ""}}]`
 
 **Recipe item** (`items[].type === "recipe"`):
 ```json
@@ -132,7 +132,7 @@ Filter IDs are formatted as `name:value` (e.g., `diet:43`).
 
 **URL**: `https://oda.com/no/recipes/{id}-{slug}/`
 
-**Query key**: `["get-recipe-detail", recipeId, numPortions]`
+**Query key**: `[{_id: "recipeDetailApi", path: {recipe_id}, query: {portions}}]`
 
 **Data shape**:
 ```json
@@ -186,7 +186,7 @@ Cart data is **not in `__NEXT_DATA__`** — it's loaded client-side. Use the RES
 
 ### Get Cart
 
-**GET** `https://oda.com/tienda-web-api/v1/cart/`
+**GET** `https://oda.com/api/v1/cart/`
 
 Headers: `Accept: application/json`, `Cookie`, `Origin: https://oda.com`, `Referer`, `X-CSRFToken`.
 
@@ -226,7 +226,7 @@ Headers: `Accept: application/json`, `Cookie`, `Origin: https://oda.com`, `Refer
 
 ### Add to Cart
 
-**POST** `https://oda.com/tienda-web-api/v1/cart/items/`
+**POST** `https://oda.com/api/v1/cart/items/`
 
 Headers: `Accept: application/json`, `Content-Type: application/json`, `Cookie`, `Origin: https://oda.com`, `Referer`, `X-CSRFToken`.
 
@@ -238,7 +238,7 @@ Returns full cart response (same as GET).
 
 ### Remove from Cart
 
-**POST** `https://oda.com/tienda-web-api/v1/cart/items/` with `quantity: 0`:
+**POST** `https://oda.com/api/v1/cart/items/` with `quantity: 0`:
 
 ```json
 {"items": [{"product_id": 132, "quantity": 0}]}
@@ -246,7 +246,7 @@ Returns full cart response (same as GET).
 
 ### Add Recipe to Cart
 
-**POST** `https://oda.com/tienda-web-api/v1/cart/recipe/{recipeId}/`
+**POST** `https://oda.com/api/v1/cart/recipe/{recipeId}/`
 
 ```json
 {"portions": 4}

@@ -5,13 +5,16 @@ import fs from "fs";
 import os from "os";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-test-"));
-const cookiePath = path.join(tempDir, "cookies.json");
+const anonCookiePath = path.join(tempDir, "cookies.json");
+
+const authCookiePath = process.env.ODA_COOKIE_PATH;
+const isLoggedIn = authCookiePath && fs.existsSync(authCookiePath);
 
 describe("Oda Integration Tests", () => {
   let client: OdaClient;
 
   beforeAll(() => {
-    client = new OdaClient(cookiePath);
+    client = new OdaClient(anonCookiePath);
   });
 
   afterAll(() => {
@@ -86,58 +89,66 @@ describe("Oda Integration Tests", () => {
     }
   }, 30000);
 
-  it("should add and remove a product from cart", async () => {
-    const results = await client.searchProducts("salt");
-    const productId = results.items[0].id;
+  describe.skipIf(!isLoggedIn)("Cart tests (requires ODA_COOKIE_PATH)", () => {
+    let authClient: OdaClient;
 
-    // Add to cart (throws on failure)
-    await client.addToCart(productId);
+    beforeAll(() => {
+      authClient = new OdaClient(authCookiePath!);
+    });
 
-    // Verify product is in cart
-    const cartAfterAdd = await client.getCartContents();
-    expect(cartAfterAdd.some((item) => item.id === productId)).toBe(true);
+    it("should add and remove a product from cart", async () => {
+      const results = await authClient.searchProducts("salt");
+      const productId = results.items[0].id;
 
-    // Remove from cart (throws on failure)
-    await client.removeFromCart(productId);
+      // Add to cart (throws on failure)
+      await authClient.addToCart(productId);
 
-    // Verify product is no longer in cart
-    const cartAfterRemove = await client.getCartContents();
-    expect(cartAfterRemove.some((item) => item.id === productId)).toBe(false);
-  }, 60000);
+      // Verify product is in cart
+      const cartAfterAdd = await authClient.getCartContents();
+      expect(cartAfterAdd.some((item) => item.id === productId)).toBe(true);
 
-  it("should clear the cart", async () => {
-    const results = await client.searchProducts("salt");
-    const productId = results.items[0].id;
+      // Remove from cart (throws on failure)
+      await authClient.removeFromCart(productId);
 
-    // Add an item first (throws on failure)
-    await client.addToCart(productId);
+      // Verify product is no longer in cart
+      const cartAfterRemove = await authClient.getCartContents();
+      expect(cartAfterRemove.some((item) => item.id === productId)).toBe(false);
+    }, 60000);
 
-    // Verify cart is non-empty
-    const cartBefore = await client.getCartContents();
-    expect(cartBefore.length).toBeGreaterThan(0);
+    it("should clear the cart", async () => {
+      const results = await authClient.searchProducts("salt");
+      const productId = results.items[0].id;
 
-    // Clear cart (throws on failure)
-    await client.clearCart();
+      // Add an item first (throws on failure)
+      await authClient.addToCart(productId);
 
-    // Verify cart is empty
-    const cartAfter = await client.getCartContents();
-    expect(cartAfter.length).toBe(0);
-  }, 60000);
+      // Verify cart is non-empty
+      const cartBefore = await authClient.getCartContents();
+      expect(cartBefore.length).toBeGreaterThan(0);
 
-  it("should add and remove a recipe from cart", async () => {
-    const results = await client.searchRecipes("pizza");
-    const recipeId = results.items[0].id;
+      // Clear cart (throws on failure)
+      await authClient.clearCart();
 
-    // Add recipe to cart (uses cart items API with recipe ingredients)
-    await client.addRecipeToCart(recipeId, 2);
+      // Verify cart is empty
+      const cartAfter = await authClient.getCartContents();
+      expect(cartAfter.length).toBe(0);
+    }, 60000);
 
-    // Verify cart has items from the recipe
-    const cartAfterAdd = await client.getCartContents();
-    expect(cartAfterAdd.length).toBeGreaterThan(0);
+    it("should add and remove a recipe from cart", async () => {
+      const results = await authClient.searchRecipes("pizza");
+      const recipeId = results.items[0].id;
 
-    // Remove recipe from cart
-    await client.removeRecipeFromCart(recipeId);
-  }, 60000);
+      // Add recipe to cart (uses cart items API with recipe ingredients)
+      await authClient.addRecipeToCart(recipeId, 2);
+
+      // Verify cart has items from the recipe
+      const cartAfterAdd = await authClient.getCartContents();
+      expect(cartAfterAdd.length).toBeGreaterThan(0);
+
+      // Remove recipe from cart
+      await authClient.removeRecipeFromCart(recipeId);
+    }, 60000);
+  });
 
   it("should dump page data", async () => {
     const result = await client.dump(

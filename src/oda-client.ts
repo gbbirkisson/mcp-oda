@@ -221,13 +221,17 @@ export class OdaClient {
   /**
    * Find a specific query result from dehydrated React Query state.
    * The __NEXT_DATA__ contains queries keyed by queryKey arrays.
+   * Supports both old string keys (key[0] === prefix) and new object
+   * keys (key[0]._id === prefix).
    */
   private findDehydratedQuery(nextData: any, keyPrefix: string): any | null {
     const queries =
       nextData?.props?.pageProps?.dehydratedState?.queries || [];
     for (const q of queries) {
       const key = q.queryKey;
-      if (Array.isArray(key) && key[0] === keyPrefix) {
+      if (!Array.isArray(key) || key.length === 0) continue;
+      const first = key[0];
+      if (first === keyPrefix || (typeof first === "object" && first?._id === keyPrefix)) {
         return q.state?.data ?? null;
       }
     }
@@ -274,8 +278,9 @@ export class OdaClient {
     }
 
     try {
-      // Data is in dehydrated React Query state under "searchpageresponse"
-      const data = this.findDehydratedQuery(nextData, "searchpageresponse");
+      // Data is in dehydrated React Query state (key: "mixedSearch" or legacy "searchpageresponse")
+      const data = this.findDehydratedQuery(nextData, "mixedSearch")
+        ?? this.findDehydratedQuery(nextData, "searchpageresponse");
       if (!data || !data.items) {
         return { page_url: url, items: [], has_more: false };
       }
@@ -424,8 +429,9 @@ export class OdaClient {
     }
 
     try {
-      // Data is in dehydrated React Query state under "searchresponse"
-      const data = this.findDehydratedQuery(nextData, "searchresponse");
+      // Data is in dehydrated React Query state (key: "mixedSearch" or legacy "searchresponse")
+      const data = this.findDehydratedQuery(nextData, "mixedSearch")
+        ?? this.findDehydratedQuery(nextData, "searchresponse");
       if (!data || !data.items) {
         return { page_url: url, filters: [], items: [], has_more: false };
       }
@@ -491,7 +497,8 @@ export class OdaClient {
     if (!nextData) {
       throw new Error(`Could not load recipe page for ID ${recipeId}`);
     }
-    const data = this.findDehydratedQuery(nextData, "get-recipe-detail");
+    const data = this.findDehydratedQuery(nextData, "recipeDetailApi")
+      ?? this.findDehydratedQuery(nextData, "get-recipe-detail");
     if (!data) {
       throw new Error(`Could not find recipe data for ID ${recipeId}`);
     }

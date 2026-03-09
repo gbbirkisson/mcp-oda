@@ -16,7 +16,7 @@ __NEXT_DATA__.props.pageProps.dehydratedState.queries[]
 
 **URL**: `https://oda.com/no/search/products/?q={query}&page={page}`
 
-**Query key**: `["searchpageresponse", query, {page, size: 40, type: "product", filters: ""}]`
+**Query key**: `[{_id: "mixedSearch", query: {q, page, size: 42, type: "product", filters: "", "only-available": false}}]`
 
 **Data shape**:
 ```json
@@ -81,7 +81,7 @@ __NEXT_DATA__.props.pageProps.dehydratedState.queries[]
 
 **URL**: `https://oda.com/no/recipes/all/?q={query}&page={page}&filters={filters}`
 
-**Query key**: `["searchresponse", query, {type: "plain_recipe", page, size: 48, filters: ""}]`
+**Query key**: `[{_id: "mixedSearch", query: {q, type: "plain_recipe", page, size: 48, filters: ""}}]`
 
 **Recipe item** (`items[].type === "recipe"`):
 ```json
@@ -132,7 +132,7 @@ Filter IDs are formatted as `name:value` (e.g., `diet:43`).
 
 **URL**: `https://oda.com/no/recipes/{id}-{slug}/`
 
-**Query key**: `["get-recipe-detail", recipeId, numPortions]`
+**Query key**: `[{_id: "recipeDetailApi", path: {recipe_id}, query: {portions}}]`
 
 **Data shape**:
 ```json

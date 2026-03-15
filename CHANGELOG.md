@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.6](https://github.com/gbbirkisson/mcp-oda/compare/0.4.5...0.4.6) (2026-03-15)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @types/node to v25.4.0 ([#49](https://github.com/gbbirkisson/mcp-oda/issues/49)) ([9166477](https://github.com/gbbirkisson/mcp-oda/commit/9166477ba458dc761c2a531fc86bfe98fcfaf773))
+* **deps:** update dependency @types/node to v25.5.0 ([#52](https://github.com/gbbirkisson/mcp-oda/issues/52)) ([292aec3](https://github.com/gbbirkisson/mcp-oda/commit/292aec31724c7ab09a81605f54ad9a2fbd07ed7a))
+* **deps:** update dependency typescript-eslint to v8.57.0 ([#50](https://github.com/gbbirkisson/mcp-oda/issues/50)) ([5e9a60b](https://github.com/gbbirkisson/mcp-oda/commit/5e9a60b8b9bff03e85d95e94306b388315d865c7))
+* **deps:** update dependency vitest to v4.1.0 ([#53](https://github.com/gbbirkisson/mcp-oda/issues/53)) ([88e73a9](https://github.com/gbbirkisson/mcp-oda/commit/88e73a9ba5f6b4906cf61af5cc01d4552dd132f8))
+* **deps:** update marocchino/sticky-pull-request-comment action to v3 ([#54](https://github.com/gbbirkisson/mcp-oda/issues/54)) ([4a64746](https://github.com/gbbirkisson/mcp-oda/commit/4a64746ed24ebcdaa6e6d8cf3beb5a37c81cdc1e))
+
 ## [0.4.5](https://github.com/gbbirkisson/mcp-oda/compare/0.4.4...0.4.5) (2026-03-09)
 
 

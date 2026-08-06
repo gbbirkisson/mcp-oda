@@ -121,7 +121,7 @@ Claude Desktop configuration example:
 
 ```bash
 /plugin marketplace add gbbirkisson/mcp-oda
-/plugin install mcp-oda@gbbirkisson/mcp-oda
+/plugin install mcp-oda@mcp-oda
 ```
 
 #### Gemini CLI

@@ -1,15 +1,74 @@
 # Oda API Data Structures
 
-Findings from inspecting `__NEXT_DATA__` and REST API responses.
+Findings from inspecting page hydration data and REST API responses.
 
 ## Architecture
 
-Oda uses Next.js with React Query. Server-side data is embedded in `<script id="__NEXT_DATA__">` as dehydrated React Query state:
+Oda uses Next.js with React Query. Server-side data reaches the browser as
+dehydrated React Query state, but **where** that state lives changed when Oda
+migrated from the Next.js Pages Router to the App Router.
+
+### Current layout (App Router)
+
+There is no `__NEXT_DATA__` script tag. The state is embedded in the RSC flight
+payload, which Next.js streams as a series of `self.__next_f.push` calls:
+
+```html
+<script>(self.__next_f=self.__next_f||[]).push([0])</script>
+<script>self.__next_f.push([1,"1:\"$Sreact.fragment\"\n2:I[339756,...]\n..."])</script>
+```
+
+Each `push([1, "<chunk>"])` carries a slice of the payload. Chunks may split
+anywhere — even mid-token — so they are only meaningful once concatenated in
+order.
+
+The joined payload is a newline-separated list of rows (`<id>:<json>`). React
+Query state appears inside `HydrationBoundary` rows:
+
+```
+48:["$","$L30",null,{"state":{"mutations":[],"queries":[ ... ]}}]
+```
+
+A page renders **several** boundaries — global chrome carries `user` and
+`apiV1UserConfiguration`, page content carries `mixedSearch` or
+`recipeDetailApi` — so all `queries` arrays must be collected and merged, not
+just the first.
+
+Each query entry has the familiar shape:
+
+```
+.queryKey   → [{_id: "queryName", ...params}]   (older pages used ["queryName", ...])
+.state.data → the actual data
+```
+
+### Legacy layout (Pages Router)
+
+Older pages embedded everything in one script tag:
 
 ```
 __NEXT_DATA__.props.pageProps.dehydratedState.queries[]
-  .queryKey  → ["queryName", ...params]
-  .state.data → the actual data
+```
+
+`extractNextData()` in `src/oda-client.ts` reads whichever layout is present and
+normalises both to the legacy `props.pageProps.dehydratedState` shape, so the
+rest of the client is layout-agnostic.
+
+### Inspecting a page
+
+The `dump` command prints the query keys found on a page and the normalised
+hydration data, which is the quickest way to re-check these structures:
+
+```bash
+mcp-oda dump "https://oda.com/no/search/products/?q=melk"
+```
+
+```
+=== Query keys (5) ===
+tiendaWebMegamenu
+apiV1UserConfiguration
+user
+onboardingUrl
+mixedSearch
 ```
 
 ## Product Search
@@ -23,13 +82,13 @@ __NEXT_DATA__.props.pageProps.dehydratedState.queries[]
 {
   "type": "product",
   "attributes": {
-    "items": 40,
+    "items": 42,
     "page": 1,
     "hasMoreItems": true,
     "queryString": "melk",
     "requestTypes": [
-      {"count": 220, "type": "product", "displayName": "Varer"},
-      {"count": 301, "type": "recipe", "displayName": "Oppskrifter"}
+      {"count": 562, "type": "product", "displayName": "Varer"},
+      {"count": 308, "type": "recipe", "displayName": "Oppskrifter"}
     ]
   },
   "items": [...],
@@ -158,7 +217,7 @@ Filter IDs are formatted as `name:value` (e.g., `diet:43`).
     {
       "id": 6563,
       "title": "Pizzabunn, halvstekt",
-      "displayQuantity": "1.000000",
+      "displayQuantity": "1.000",
       "displayUnit": "stk",
       "group": "",
       "hint": null
@@ -182,7 +241,10 @@ Filter IDs are formatted as `name:value` (e.g., `diet:43`).
 
 ## Cart
 
-Cart data is **not in `__NEXT_DATA__`** — it's loaded client-side. Use the REST API directly.
+Cart data is **not in the page hydration data** — it's loaded client-side. Use the REST API directly.
+
+All cart mutations are JSON (`Content-Type: application/json`) and require the
+`X-CSRFToken` header plus session cookies.
 
 ### Get Cart
 
@@ -238,18 +300,51 @@ Returns full cart response (same as GET).
 
 ### Remove from Cart
 
-**POST** `https://oda.com/api/v1/cart/items/` with `quantity: 0`:
+**POST** `https://oda.com/api/v1/cart/items/`
+
+`quantity` is a **relative delta**, not an absolute count — send a negative
+number to remove:
 
 ```json
-{"items": [{"product_id": 132, "quantity": 0}]}
+{"items": [{"product_id": 132, "quantity": -1}]}
 ```
+
+### Clear Cart
+
+**POST** `https://oda.com/api/v1/cart/clear/` with an empty body (`{}`).
 
 ### Add Recipe to Cart
 
-**POST** `https://oda.com/api/v1/cart/recipe/{recipeId}/`
+There is no single "add recipe" endpoint. The recipe is expanded client-side:
+fetch the recipe detail, take each `ingredients[]` entry that has a
+`product.id`, and scale `portionQuantity` by the requested portions.
+
+**POST** `https://oda.com/api/v1/cart/items/?group_by=recipes`
 
 ```json
-{"portions": 4}
+{
+  "items": [
+    {
+      "product_id": 36162,
+      "quantity": 1,
+      "from_recipe_id": 608,
+      "from_recipe_portions": 4
+    }
+  ]
+}
+```
+
+`from_recipe_id` / `from_recipe_portions` are what let Oda group the items as a
+recipe in the cart — and what makes removal by recipe possible.
+
+### Remove Recipe from Cart
+
+**POST** `https://oda.com/api/v1/cart/items/?group_by=recipes`
+
+Keyed by `recipe_id` rather than `product_id`:
+
+```json
+{"items": [{"recipe_id": 608, "quantity": -1, "delete": true}]}
 ```
 
 ## Authentication
@@ -260,15 +355,22 @@ All mutation requests require `X-CSRFToken` header. The token is in the `csrftok
 
 ### Login
 
-1. **GET** `https://oda.com/no/user/login/` to obtain CSRF token
-2. **POST** `https://oda.com/no/user/login/` with `Content-Type: application/x-www-form-urlencoded`:
-   - `email`, `password`, `csrfmiddlewaretoken` (= CSRF token)
-   - Include `Referer: https://oda.com/no/user/login/`
-   - Successful login returns 302 redirect
+1. **GET** `https://oda.com/no/user/login/` to obtain the `csrftoken` cookie
+2. **POST** `https://oda.com/api/v1/user/login/` with `Content-Type: application/json`:
+
+   ```json
+   {"username": "user@example.com", "password": "..."}
+   ```
+
+   - The email goes in `username`
+   - Include `X-CSRFToken` and `Referer: https://oda.com/no/user/login/`
+   - Success is a 2xx; the session arrives as cookies
 
 ### Check User
 
-The `"user"` dehydrated query is present on all pages (when authenticated):
+The `"user"` dehydrated query is present on all pages (when authenticated).
+Note its `queryKey` is a plain string array (`["user"]`), not the
+`[{_id: ...}]` form used by the search queries:
 
 ```json
 {
@@ -282,8 +384,13 @@ The `"user"` dehydrated query is present on all pages (when authenticated):
 
 ## Important Notes
 
-- Product search uses **camelCase** field names (from React/Next.js)
+- Search and recipe data use **camelCase** field names (from React/Next.js)
 - Cart REST API uses **snake_case** field names (Django backend)
 - The `425 Too Early` status is returned when the server is overloaded
 - Pagination is page-number based (`?page=2`), not cursor-based
 - All requests need the `csrftoken` cookie — obtained from any GET request
+- Cart `quantity` values are **deltas**, not absolute counts
+- Recipe URLs redirect to a slug form (`/no/recipes/608` →
+  `/no/recipes/608-oda-pizza-parma/`), so redirects must be followed
+- Page requests need browser-like headers; a bare `curl` can be served a page
+  with no hydration data at all

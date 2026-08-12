@@ -9,6 +9,250 @@ import {
 } from "./types.js";
 import fs from "fs";
 
+/**
+ * Find the end of the JSON array/object that starts at `start`, respecting
+ * string literals and escapes, then parse that slice. Lets us pull a single
+ * embedded JSON value out of a larger, non-JSON document.
+ */
+function parseJsonAt(text: string, start: number): any | null {
+  const open = text[start];
+  const close = open === "[" ? "]" : "}";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === open) depth++;
+    else if (c === close && --depth === 0) {
+      try {
+        return JSON.parse(text.slice(start, i + 1));
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Concatenate the RSC flight payload, which Next.js streams to the browser as
+ * a series of `self.__next_f.push([1, "<chunk>"])` calls. Chunks may split
+ * anywhere - even mid-token - so they are only meaningful once joined.
+ */
+function collectFlightPayload(html: string): string {
+  const re = /self\.__next_f\.push\(/g;
+  let payload = "";
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(html)) !== null) {
+    let i = m.index + m[0].length;
+    while (i < html.length && /\s/.test(html[i])) i++;
+    if (html[i] !== "[") continue;
+
+    const arr = parseJsonAt(html, i);
+    if (Array.isArray(arr) && arr[0] === 1 && typeof arr[1] === "string") {
+      payload += arr[1];
+    }
+  }
+  return payload;
+}
+
+/**
+ * Collect React Query entries from every HydrationBoundary in the flight
+ * payload. A page renders several boundaries (global chrome, page content),
+ * each carrying its own `{"state":{"mutations":[],"queries":[...]}}`.
+ */
+function collectDehydratedQueries(flight: string): any[] {
+  const re = /"queries"\s*:\s*\[/g;
+  const queries: any[] = [];
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(flight)) !== null) {
+    const arr = parseJsonAt(flight, m.index + m[0].length - 1);
+    if (!Array.isArray(arr)) continue;
+    queries.push(
+      ...arr.filter((q) => q && typeof q === "object" && "queryKey" in q),
+    );
+  }
+  return queries;
+}
+
+/**
+ * Pull the hydration data out of an Oda page.
+ *
+ * Oda has migrated from the Next.js Pages Router to the App Router: the
+ * `__NEXT_DATA__` script tag is gone and React Query state now lives in the
+ * RSC flight payload. Both layouts are normalised to the legacy
+ * `props.pageProps.dehydratedState` shape so callers stay unchanged.
+ */
+export function extractNextData(html: string): any | null {
+  const legacy = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+  if (legacy) {
+    try {
+      return JSON.parse(legacy[1]);
+    } catch {
+      // Fall through to the App Router layout.
+    }
+  }
+
+  const flight = collectFlightPayload(html);
+  if (!flight) return null;
+
+  const queries = collectDehydratedQueries(flight);
+  if (queries.length === 0) return null;
+
+  return { props: { pageProps: { dehydratedState: { queries } } } };
+}
+
+/**
+ * Find a specific query result in dehydrated React Query state.
+ * Supports both old string keys (key[0] === prefix) and new object
+ * keys (key[0]._id === prefix).
+ */
+export function findDehydratedQuery(
+  nextData: any,
+  keyPrefix: string,
+): any | null {
+  const queries = nextData?.props?.pageProps?.dehydratedState?.queries || [];
+  for (const q of queries) {
+    const key = q.queryKey;
+    if (!Array.isArray(key) || key.length === 0) continue;
+    const first = key[0];
+    if (
+      first === keyPrefix ||
+      (typeof first === "object" && first?._id === keyPrefix)
+    ) {
+      return q.state?.data ?? null;
+    }
+  }
+  return null;
+}
+
+/** Render a React Query key as a readable name, for `dump` discovery output. */
+export function describeQueryKey(key: any): string {
+  const first = Array.isArray(key) ? key[0] : key;
+  if (typeof first === "string") return first;
+  if (first && typeof first === "object" && typeof first._id === "string") {
+    return first._id;
+  }
+  return JSON.stringify(key);
+}
+
+/**
+ * Locate a search payload, distinguishing "Oda changed their page structure"
+ * from "this search legitimately matched nothing". Returning an empty list for
+ * the former hides breakage until someone notices the tool has quietly stopped
+ * working, so anything unrecognisable throws.
+ */
+function requireSearchData(
+  url: string,
+  nextData: any,
+  kind: string,
+  legacyKey: string,
+): any {
+  if (!nextData) {
+    throw new Error(
+      `Could not load page data from ${url} - the page returned no hydration state`,
+    );
+  }
+
+  const data =
+    findDehydratedQuery(nextData, "mixedSearch") ??
+    findDehydratedQuery(nextData, legacyKey);
+
+  if (!data || !Array.isArray(data.items)) {
+    throw new Error(
+      `Could not find ${kind} search results in page data from ${url} - Oda's page structure may have changed`,
+    );
+  }
+  return data;
+}
+
+export function parseProductPage(url: string, nextData: any): ProductPage {
+  const data = requireSearchData(url, nextData, "product", "searchpageresponse");
+  const items: SearchResult[] = [];
+
+  for (const item of data.items) {
+    if (item.type !== "product") continue;
+    const a = item.attributes;
+    if (!a) continue;
+
+    const unitPriceUnit = a.unitPriceQuantityAbbreviation || "";
+
+    items.push({
+      id: a.id || item.id,
+      name: a.fullName || a.name || "Unknown",
+      subtitle: a.nameExtra || "",
+      price: parseFloat(a.grossPrice) || 0,
+      relative_price: parseFloat(a.grossUnitPrice) || 0,
+      relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
+    });
+  }
+
+  return {
+    page_url: url,
+    items,
+    has_more: data.attributes?.hasMoreItems === true,
+  };
+}
+
+export function parseRecipePage(url: string, nextData: any): RecipePage {
+  const data = requireSearchData(url, nextData, "recipe", "searchresponse");
+
+  // Filters: data.filters[] can be a filtergroup or a flat filter
+  const filters: RecipeFilter[] = [];
+  for (const f of data.filters || []) {
+    if (f.type === "filtergroup" && f.items) {
+      const category = f.displayName || f.name || "Unknown";
+      for (const opt of f.items) {
+        filters.push({
+          id: `${opt.name}:${opt.value}`,
+          name: opt.displayValue || opt.value || "",
+          count: opt.count || 0,
+          category,
+        });
+      }
+    } else if (f.type === "filter") {
+      filters.push({
+        id: `${f.name}:${f.value}`,
+        name: f.displayValue || f.value || "",
+        count: f.count || 0,
+        category: "Filter",
+      });
+    }
+  }
+
+  const items: Recipe[] = [];
+  for (const item of data.items) {
+    if (item.type !== "recipe") continue;
+    const a = item.attributes;
+    if (!a) continue;
+
+    items.push({
+      id: a.id || item.id,
+      name: a.title || "Unknown Recipe",
+      image_url: a.featureImageUrl || undefined,
+      duration: a.cookingDurationString || undefined,
+      difficulty: a.difficultyString || a.difficulty || undefined,
+    });
+  }
+
+  return {
+    page_url: url,
+    filters,
+    items,
+    has_more: data.attributes?.hasMoreItems === true,
+  };
+}
+
 export class OdaClient {
   static BASE_URL = "https://oda.com/no";
   static API_BASE = "https://oda.com";
@@ -170,32 +414,6 @@ export class OdaClient {
 
   // --- HTML parsing ---
 
-  private extractNextData(html: string): any | null {
-    const match = html.match(
-      /<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s,
-    );
-    if (!match) return null;
-    try {
-      return JSON.parse(match[1]);
-    } catch {
-      return null;
-    }
-  }
-
-  private extractJsonLd(html: string): any[] {
-    const results: any[] = [];
-    const regex = /<script type="application\/ld\+json">(.*?)<\/script>/gs;
-    let m;
-    while ((m = regex.exec(html)) !== null) {
-      try {
-        results.push(JSON.parse(m[1]));
-      } catch {
-        // skip malformed
-      }
-    }
-    return results;
-  }
-
   async fetchNextData(url: string): Promise<any | null> {
     const response = await this.getFollowRedirects(url);
     if (response.status === 425) {
@@ -204,45 +422,14 @@ export class OdaClient {
       );
     }
     const html = await response.text();
-    return this.extractNextData(html);
-  }
-
-  async fetchJsonLd(url: string): Promise<any[]> {
-    const response = await this.getFollowRedirects(url);
-    if (response.status === 425) {
-      throw new Error(
-        "Server returned 425 Too Early. Please try again later.",
-      );
-    }
-    const html = await response.text();
-    return this.extractJsonLd(html);
-  }
-
-  /**
-   * Find a specific query result from dehydrated React Query state.
-   * The __NEXT_DATA__ contains queries keyed by queryKey arrays.
-   * Supports both old string keys (key[0] === prefix) and new object
-   * keys (key[0]._id === prefix).
-   */
-  private findDehydratedQuery(nextData: any, keyPrefix: string): any | null {
-    const queries =
-      nextData?.props?.pageProps?.dehydratedState?.queries || [];
-    for (const q of queries) {
-      const key = q.queryKey;
-      if (!Array.isArray(key) || key.length === 0) continue;
-      const first = key[0];
-      if (first === keyPrefix || (typeof first === "object" && first?._id === keyPrefix)) {
-        return q.state?.data ?? null;
-      }
-    }
-    return null;
+    return extractNextData(html);
   }
 
   // --- Dump helper (for CLI discovery) ---
 
   async dump(url: string): Promise<{
     nextData: any | null;
-    jsonLd: any[];
+    queryKeys: string[];
     headers: Record<string, string>;
     status: number;
     finalUrl: string;
@@ -255,9 +442,13 @@ export class OdaClient {
       responseHeaders[key] = value;
     });
 
+    const nextData = extractNextData(html);
+    const queries: any[] =
+      nextData?.props?.pageProps?.dehydratedState?.queries ?? [];
+
     return {
-      nextData: this.extractNextData(html),
-      jsonLd: this.extractJsonLd(html),
+      nextData,
+      queryKeys: queries.map((q) => describeQueryKey(q.queryKey)),
       headers: responseHeaders,
       status: response.status,
       finalUrl: response.url,
@@ -269,53 +460,7 @@ export class OdaClient {
   async searchProducts(query: string, page = 1): Promise<ProductPage> {
     const url = `${OdaClient.BASE_URL}/search/products/?q=${encodeURIComponent(query)}${page > 1 ? `&page=${page}` : ""}`;
     const nextData = await this.fetchNextData(url);
-    return this.parseProductPage(url, nextData);
-  }
-
-  private parseProductPage(url: string, nextData: any): ProductPage {
-    if (!nextData) {
-      return { page_url: url, items: [], has_more: false };
-    }
-
-    try {
-      // Data is in dehydrated React Query state (key: "mixedSearch" or legacy "searchpageresponse")
-      const data = this.findDehydratedQuery(nextData, "mixedSearch")
-        ?? this.findDehydratedQuery(nextData, "searchpageresponse");
-      if (!data || !data.items) {
-        return { page_url: url, items: [], has_more: false };
-      }
-
-      const has_more = data.attributes?.hasMoreItems === true;
-
-      const items: SearchResult[] = [];
-
-      for (const item of data.items) {
-        if (item.type !== "product") continue;
-        const a = item.attributes;
-        if (!a) continue;
-
-        const id = a.id || item.id;
-        const name = a.fullName || a.name || "Unknown";
-        const subtitle = a.nameExtra || "";
-        const price = parseFloat(a.grossPrice) || 0;
-        const unitPrice = parseFloat(a.grossUnitPrice) || 0;
-        const unitPriceUnit = a.unitPriceQuantityAbbreviation || "";
-
-        items.push({
-          id,
-          name,
-          subtitle,
-          price,
-          relative_price: unitPrice,
-          relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
-        });
-      }
-
-      return { page_url: url, items, has_more };
-    } catch (e) {
-      console.error("Failed to parse product page", e);
-      return { page_url: url, items: [], has_more: false };
-    }
+    return parseProductPage(url, nextData);
   }
 
   // --- Cart methods ---
@@ -420,75 +565,7 @@ export class OdaClient {
     const qs = params.toString();
     const url = `${OdaClient.BASE_URL}/recipes/all/${qs ? `?${qs}` : ""}`;
     const nextData = await this.fetchNextData(url);
-    return this.parseRecipePage(url, nextData);
-  }
-
-  private parseRecipePage(url: string, nextData: any): RecipePage {
-    if (!nextData) {
-      return { page_url: url, filters: [], items: [], has_more: false };
-    }
-
-    try {
-      // Data is in dehydrated React Query state (key: "mixedSearch" or legacy "searchresponse")
-      const data = this.findDehydratedQuery(nextData, "mixedSearch")
-        ?? this.findDehydratedQuery(nextData, "searchresponse");
-      if (!data || !data.items) {
-        return { page_url: url, filters: [], items: [], has_more: false };
-      }
-
-      const has_more = data.attributes?.hasMoreItems === true;
-
-      // Filters: data.filters[] can be filtergroup or flat filter
-      const filters: RecipeFilter[] = [];
-      for (const f of data.filters || []) {
-        if (f.type === "filtergroup" && f.items) {
-          const category = f.displayName || f.name || "Unknown";
-          for (const opt of f.items) {
-            filters.push({
-              id: `${opt.name}:${opt.value}`,
-              name: opt.displayValue || opt.value || "",
-              count: opt.count || 0,
-              category,
-            });
-          }
-        } else if (f.type === "filter") {
-          filters.push({
-            id: `${f.name}:${f.value}`,
-            name: f.displayValue || f.value || "",
-            count: f.count || 0,
-            category: "Filter",
-          });
-        }
-      }
-
-      // Recipe items
-      const items: Recipe[] = [];
-
-      for (const item of data.items) {
-        if (item.type !== "recipe") continue;
-        const a = item.attributes;
-        if (!a) continue;
-
-        const recipeId = a.id || item.id;
-        const name = a.title || "Unknown Recipe";
-        const imageUrl = a.featureImageUrl || undefined;
-        const duration = a.cookingDurationString || undefined;
-        const difficulty = a.difficultyString || a.difficulty || undefined;
-
-        items.push({
-          id: recipeId,
-          name,
-          image_url: imageUrl,
-          duration,
-          difficulty,
-        });
-      }
-
-      return { page_url: url, filters, items, has_more };
-    } catch (e) {
-      console.error("Failed to parse recipe page", e);
-      return { page_url: url, filters: [], items: [], has_more: false };
-    }
+    return parseRecipePage(url, nextData);
   }
 
   private async getRecipeData(recipeId: number): Promise<any> {
@@ -497,8 +574,8 @@ export class OdaClient {
     if (!nextData) {
       throw new Error(`Could not load recipe page for ID ${recipeId}`);
     }
-    const data = this.findDehydratedQuery(nextData, "recipeDetailApi")
-      ?? this.findDehydratedQuery(nextData, "get-recipe-detail");
+    const data = findDehydratedQuery(nextData, "recipeDetailApi")
+      ?? findDehydratedQuery(nextData, "get-recipe-detail");
     if (!data) {
       throw new Error(`Could not find recipe data for ID ${recipeId}`);
     }
@@ -600,7 +677,7 @@ export class OdaClient {
   private extractUserName(nextData: any): string | null {
     if (!nextData) return null;
     try {
-      const user = this.findDehydratedQuery(nextData, "user");
+      const user = findDehydratedQuery(nextData, "user");
       if (user) {
         const name =
           `${user.firstName || ""} ${user.lastName || ""}`.trim();

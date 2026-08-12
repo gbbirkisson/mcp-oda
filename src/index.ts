@@ -226,7 +226,7 @@ program
 // --- dump command (unchanged) ---
 program
   .command("dump <url>")
-  .description("Fetch a URL and print __NEXT_DATA__ and JSON-LD content")
+  .description("Fetch a URL and print its hydration data")
   .action(async (url: string) => {
     const client = makeClient();
 
@@ -242,24 +242,19 @@ program
         console.log(`${key}: ${value}`);
       }
 
-      if (result.nextData) {
-        console.log(`\n=== __NEXT_DATA__ ===`);
-        console.log(JSON.stringify(result.nextData, null, 2));
-      } else {
-        console.log(`\n=== __NEXT_DATA__ ===`);
-        console.log("(not found)");
-      }
+      console.log(`\n=== Query keys (${result.queryKeys.length}) ===`);
+      console.log(
+        result.queryKeys.length > 0
+          ? result.queryKeys.join("\n")
+          : "(none found)",
+      );
 
-      if (result.jsonLd.length > 0) {
-        console.log(`\n=== JSON-LD (${result.jsonLd.length} scripts) ===`);
-        for (const [i, ld] of result.jsonLd.entries()) {
-          console.log(`\n--- JSON-LD #${i} ---`);
-          console.log(JSON.stringify(ld, null, 2));
-        }
-      } else {
-        console.log(`\n=== JSON-LD ===`);
-        console.log("(not found)");
-      }
+      console.log(`\n=== Hydration data ===`);
+      console.log(
+        result.nextData
+          ? JSON.stringify(result.nextData, null, 2)
+          : "(not found)",
+      );
     } catch (e) {
       console.error("Dump failed:", e);
       process.exit(1);

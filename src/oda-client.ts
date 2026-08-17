@@ -279,6 +279,7 @@ export class OdaClient {
   private loadCookies() {
     try {
       if (!fs.existsSync(this.cookiePath)) return;
+      fs.chmodSync(this.cookiePath, 0o600);
       const raw = JSON.parse(fs.readFileSync(this.cookiePath, "utf-8"));
 
       if (Array.isArray(raw)) {
@@ -302,6 +303,9 @@ export class OdaClient {
   saveCookies() {
     // Session cookies authenticate the Oda account; keep them private to the
     // local account even when the host's default umask is permissive.
+    if (fs.existsSync(this.cookiePath)) {
+      fs.chmodSync(this.cookiePath, 0o600);
+    }
     fs.writeFileSync(this.cookiePath, JSON.stringify(this.cookies, null, 2), {
       mode: 0o600,
     });
@@ -507,11 +511,25 @@ export class OdaClient {
   > {
     let url: string | null = `${OdaClient.API_BASE}/api/v1/orders/`;
     const orderNumbers: string[] = [];
+    const visitedPages = new Set<string>();
 
     // The order-list endpoint is paginated by date. Only request enough order
     // details to answer this explicit, read-only frequent-purchases query.
     while (url && orderNumbers.length < maxOrders) {
-      const page = (await (await this.apiGet(url)).json()) as any;
+      if (visitedPages.has(url)) {
+        throw new Error(
+          `Get frequent products failed: order pagination repeated URL ${url}`,
+        );
+      }
+      visitedPages.add(url);
+      const response = await this.apiGet(url);
+      if (!response.ok) {
+        await this.throwApiError(
+          "Get frequent products order list",
+          response,
+        );
+      }
+      const page = (await response.json()) as any;
       for (const month of page.results || []) {
         for (const order of month.orders || []) {
           if (order.order_number && orderNumbers.length < maxOrders) {
@@ -532,11 +550,16 @@ export class OdaClient {
       }
     >();
     for (const orderNumber of orderNumbers) {
-      const detail = (await (
-        await this.apiGet(
-          `${OdaClient.API_BASE}/api/v1/orders/${encodeURIComponent(orderNumber)}/`,
-        )
-      ).json()) as any;
+      const response = await this.apiGet(
+        `${OdaClient.API_BASE}/api/v1/orders/${encodeURIComponent(orderNumber)}/`,
+      );
+      if (!response.ok) {
+        await this.throwApiError(
+          `Get frequent products order ${orderNumber}`,
+          response,
+        );
+      }
+      const detail = (await response.json()) as any;
       for (const group of detail.items?.item_groups || []) {
         for (const item of group.items || []) {
           if (!Number.isFinite(item.product_id) || !item.description) continue;
@@ -567,7 +590,24 @@ export class OdaClient {
     const response = await this.apiGet(
       `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
     );
+    if (!response.ok) {
+      await this.throwApiError("Get cart recommendations", response);
+    }
     return response.json();
+  }
+
+  private async throwApiError(
+    operation: string,
+    response: Response,
+  ): Promise<never> {
+    const body = await response.text().catch(() => "");
+    const authHint =
+      response.status === 401 || response.status === 403
+        ? " (authentication may be required or expired)"
+        : "";
+    throw new Error(
+      `${operation} failed: HTTP ${response.status}${authHint}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+    );
   }
 
   private parseSavedList(data: any): SavedList {

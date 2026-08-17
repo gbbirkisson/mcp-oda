@@ -56,7 +56,9 @@ This project requires Node.js (v18+).
 Authenticate with your Oda account:
 
 ```bash
-printf %s "yourpassword" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+unset ODA_PASSWORD
 ```
 
 Verify your login status:
@@ -104,7 +106,9 @@ npx github:gbbirkisson/mcp-oda recipe add 123 --portions 4
 npx github:gbbirkisson/mcp-oda recipe remove 123
 
 # Authentication
-printf %s "yourpassword" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+unset ODA_PASSWORD
 npx github:gbbirkisson/mcp-oda auth logout
 npx github:gbbirkisson/mcp-oda auth user
 
@@ -153,6 +157,8 @@ If your login session is not persisting between runs:
    ```
 2. Re-authenticate:
    ```bash
-   printf %s "yourpassword" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+   read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+   printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+   unset ODA_PASSWORD
    ```
 3. Make sure you're using the same `--data-dir` for all commands if you've overridden the default.

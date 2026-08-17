@@ -623,6 +623,23 @@ export class OdaClient {
     return { ...this.parseSavedList(data), items };
   }
 
+  async addSavedListToCart(listId: number): Promise<void> {
+    const list = await this.getSavedListDetails(listId);
+    const items = list.items
+      .filter((item) => item.id > 0 && item.quantity > 0)
+      .map((item) => ({ product_id: item.id, quantity: item.quantity }));
+    if (items.length === 0) {
+      throw new Error(`Saved list ${listId} has no products to add`);
+    }
+    const response = await this.apiPost(OdaClient.CART_ITEMS_API, { items });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Add saved list to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
+    }
+  }
+
   async getCartContents(): Promise<CartItem[]> {
     // Cart data is not in __NEXT_DATA__, use the REST API directly
     const response = await this.apiGet(OdaClient.CART_API);

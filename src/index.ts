@@ -132,6 +132,22 @@ savedListCmd
     );
   });
 
+savedListCmd
+  .command("add <id>")
+  .description("Add every product in a saved shopping list to the cart")
+  .requiredOption(
+    "--confirmation <text>",
+    "Must be exactly ADD SAVED LIST TO CART",
+  )
+  .action(async (id: string, cmdOpts) => {
+    if (cmdOpts.confirmation !== "ADD SAVED LIST TO CART") {
+      throw new Error("Confirmation must be exactly ADD SAVED LIST TO CART");
+    }
+    const client = makeClient();
+    await client.addSavedListToCart(parseInt(id));
+    console.log("Saved list added to cart.");
+  });
+
 // --- cart commands ---
 const cartCmd = program.command("cart").description("Cart commands");
 

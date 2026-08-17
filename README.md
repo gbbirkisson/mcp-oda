@@ -55,7 +55,7 @@ This project requires Node.js (v18+).
 Authenticate with your Oda account:
 
 ```bash
-npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+printf %s "yourpassword" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
 ```
 
 Verify your login status:
@@ -93,7 +93,7 @@ npx github:gbbirkisson/mcp-oda recipe add 123 --portions 4
 npx github:gbbirkisson/mcp-oda recipe remove 123
 
 # Authentication
-npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+printf %s "yourpassword" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
 npx github:gbbirkisson/mcp-oda auth logout
 npx github:gbbirkisson/mcp-oda auth user
 
@@ -142,6 +142,6 @@ If your login session is not persisting between runs:
    ```
 2. Re-authenticate:
    ```bash
-   npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+   printf %s "yourpassword" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
    ```
 3. Make sure you're using the same `--data-dir` for all commands if you've overridden the default.

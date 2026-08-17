@@ -49,11 +49,18 @@ authCmd
   .command("login")
   .description("Log in with email and password")
   .option("--user <email>", "Email for login")
-  .option("--pass <password>", "Password for login")
+  .option(
+    "--pass <password>",
+    "Password for login (avoid: visible in shell history and process arguments)",
+  )
+  .option("--pass-stdin", "Read the password from standard input")
   .action(async (cmdOpts) => {
     const opts = program.opts();
+    const password = cmdOpts.passStdin
+      ? fs.readFileSync(0, "utf-8").replace(/\r?\n$/, "")
+      : cmdOpts.pass;
     const server = new OdaServer(opts.dataDir);
-    await server.auth(cmdOpts.user, cmdOpts.pass);
+    await server.auth(cmdOpts.user, password);
   });
 
 authCmd

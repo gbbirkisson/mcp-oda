@@ -109,6 +109,29 @@ productCmd
     console.log("Product added to cart.");
   });
 
+// --- saved-list commands ---
+const savedListCmd = program
+  .command("saved-list")
+  .description("Saved Oda shopping-list commands");
+
+savedListCmd
+  .command("list")
+  .description("List saved shopping lists")
+  .action(async () => {
+    const client = makeClient();
+    console.log(JSON.stringify(await client.getSavedLists(), null, 2));
+  });
+
+savedListCmd
+  .command("details <id>")
+  .description("Show products and quantities in a saved shopping list")
+  .action(async (id: string) => {
+    const client = makeClient();
+    console.log(
+      JSON.stringify(await client.getSavedListDetails(parseInt(id)), null, 2),
+    );
+  });
+
 // --- cart commands ---
 const cartCmd = program.command("cart").description("Cart commands");
 

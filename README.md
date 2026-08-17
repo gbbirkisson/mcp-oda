@@ -40,6 +40,7 @@ This MCP server provides tools to programmatically interact with Oda's grocery s
 
 - **Search products** - Search for groceries with support for Norwegian terms
 - **Browse recipes** - Search, filter, and view recipe details
+- **Saved shopping lists** - View your saved lists and their products
 - **Manage shopping cart** - View cart contents, add/remove items, add recipe ingredients
 - **CLI access** - All operations available as CLI subcommands in addition to MCP tools
 - **Session persistence** - Maintains login session across restarts
@@ -80,6 +81,10 @@ npx github:gbbirkisson/mcp-oda mcp
 npx github:gbbirkisson/mcp-oda product search melk
 npx github:gbbirkisson/mcp-oda product search melk --page 2
 npx github:gbbirkisson/mcp-oda product add 132
+
+# Saved shopping lists
+npx github:alexpomsft/mcp-oda saved-list list
+npx github:alexpomsft/mcp-oda saved-list details 123
 
 # Cart
 npx github:gbbirkisson/mcp-oda cart list

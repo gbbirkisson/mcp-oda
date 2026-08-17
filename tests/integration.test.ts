@@ -96,6 +96,16 @@ describe("Oda Integration Tests", () => {
       authClient = new OdaClient(authCookiePath!);
     });
 
+    it("should list saved shopping lists and show a list's products", async () => {
+      const lists = await authClient.getSavedLists();
+      expect(Array.isArray(lists)).toBe(true);
+      if (lists.length > 0) {
+        const details = await authClient.getSavedListDetails(lists[0].id);
+        expect(details.id).toBe(lists[0].id);
+        expect(Array.isArray(details.items)).toBe(true);
+      }
+    }, 30000);
+
     it("should add and remove a product from cart", async () => {
       const results = await authClient.searchProducts("salt");
       const productId = results.items[0].id;

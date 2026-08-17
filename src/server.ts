@@ -119,6 +119,29 @@ export class OdaServer {
     );
 
     this.mcpServer.registerTool(
+      "saved_lists_get_all",
+      {
+        description:
+          "Get the user's saved Oda shopping lists and summary counts. Read-only; does not expose private list-sharing links.",
+      },
+      this.toolHandler("saved_lists_get_all", async () => {
+        return this.jsonResult(await this.getClient().getSavedLists());
+      }),
+    );
+
+    this.mcpServer.registerTool(
+      "saved_lists_get_details",
+      {
+        description:
+          "Get the products and quantities in a saved Oda shopping list. Read-only; use a list ID from saved_lists_get_all.",
+        inputSchema: { id: z.number().int().positive() },
+      },
+      this.toolHandler("saved_lists_get_details", async ({ id }) => {
+        return this.jsonResult(await this.getClient().getSavedListDetails(id));
+      }),
+    );
+
+    this.mcpServer.registerTool(
       "cart_clear",
       {
         description:

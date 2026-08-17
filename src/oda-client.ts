@@ -6,6 +6,9 @@ import {
   RecipeFilter,
   RecipePage,
   RecipeDetail,
+  SavedList,
+  SavedListDetail,
+  SavedListItem,
 } from "./types.js";
 import fs from "fs";
 
@@ -565,6 +568,59 @@ export class OdaClient {
       `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
     );
     return response.json();
+  }
+
+  private parseSavedList(data: any): SavedList {
+    return {
+      id: Number(data.id),
+      title: data.title || "Untitled list",
+      description: data.description || "",
+      number_of_products: Number(data.number_of_products) || 0,
+      number_of_items: Number(data.number_of_items) || 0,
+      total_quantity: Number(data.total_quantity) || 0,
+      ...(data.last_bought_date
+        ? { last_bought_date: data.last_bought_date }
+        : {}),
+      url:
+        data.url || `${OdaClient.BASE_URL}/account/lists/details/${data.id}/`,
+    };
+  }
+
+  async getSavedLists(): Promise<SavedList[]> {
+    const response = await this.apiGet(
+      `${OdaClient.API_BASE}/api/v1/product-lists/?filter=product_lists`,
+    );
+    if (!response.ok) {
+      throw new Error(`Get saved lists failed: HTTP ${response.status}`);
+    }
+    const data = (await response.json()) as any;
+    return (data.results || []).map((list: any) => this.parseSavedList(list));
+  }
+
+  async getSavedListDetails(listId: number): Promise<SavedListDetail> {
+    const response = await this.apiGet(
+      `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/`,
+    );
+    if (!response.ok) {
+      throw new Error(`Get saved list failed: HTTP ${response.status}`);
+    }
+    const data = (await response.json()) as any;
+    const items: SavedListItem[] = (data.items || [])
+      .filter((item: any) => Number.isFinite(item.product?.id))
+      .map((item: any) => {
+        const product = item.product;
+        const unit = product.unit_price_quantity_abbreviation || "";
+        return {
+          id: product.id,
+          name: product.full_name || product.name || "Unknown",
+          subtitle: product.name_extra || "",
+          quantity: Number(item.quantity) || 0,
+          price: parseFloat(product.gross_price) || 0,
+          relative_price: parseFloat(product.gross_unit_price) || 0,
+          relative_price_unit: unit ? `/${unit}` : "",
+        };
+      });
+    return { ...this.parseSavedList(data), items };
   }
 
   async getCartContents(): Promise<CartItem[]> {

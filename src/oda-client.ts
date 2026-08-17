@@ -623,6 +623,30 @@ export class OdaClient {
     return { ...this.parseSavedList(data), items };
   }
 
+  async addProductToSavedList(
+    listId: number,
+    productId: number,
+    quantity = 1,
+  ): Promise<void> {
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new Error("Product ID must be a positive integer");
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error("Quantity must be positive");
+    }
+    const response = await this.apiPost(
+      `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/products/`,
+      [{ productId, quantity, delete: false }],
+      `${OdaClient.BASE_URL}/account/lists/details/${listId}/`,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Add product to saved list failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
+    }
+  }
+
   async addSavedListToCart(listId: number): Promise<void> {
     const list = await this.getSavedListDetails(listId);
     const items = list.items

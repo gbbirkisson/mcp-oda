@@ -142,6 +142,35 @@ export class OdaServer {
     );
 
     this.mcpServer.registerTool(
+      "saved_list_add_product",
+      {
+        description:
+          "Add a product to a saved Oda shopping list. This changes the saved list: call only after the user has explicitly confirmed the specific addition in the current conversation.",
+        inputSchema: {
+          list_id: z.number().int().positive(),
+          product_id: z.number().int().positive(),
+          quantity: z.number().positive().default(1),
+          confirmation: z
+            .literal("UPDATE SAVED LIST")
+            .describe(
+              "Must be the exact value UPDATE SAVED LIST; provide it only after explicit current-conversation user confirmation.",
+            ),
+        },
+      },
+      this.toolHandler(
+        "saved_list_add_product",
+        async ({ list_id, product_id, quantity }) => {
+          await this.getClient().addProductToSavedList(
+            list_id,
+            product_id,
+            quantity,
+          );
+          return this.textResult("Product added to saved list");
+        },
+      ),
+    );
+
+    this.mcpServer.registerTool(
       "saved_list_add_to_cart",
       {
         description:

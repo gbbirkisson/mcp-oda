@@ -133,6 +133,24 @@ savedListCmd
   });
 
 savedListCmd
+  .command("add-product <list-id> <product-id>")
+  .description("Add a product to a saved shopping list")
+  .option("--quantity <number>", "Quantity to add", "1")
+  .requiredOption("--confirmation <text>", "Must be exactly UPDATE SAVED LIST")
+  .action(async (listId: string, productId: string, cmdOpts) => {
+    if (cmdOpts.confirmation !== "UPDATE SAVED LIST") {
+      throw new Error("Confirmation must be exactly UPDATE SAVED LIST");
+    }
+    const client = makeClient();
+    await client.addProductToSavedList(
+      parseInt(listId),
+      parseInt(productId),
+      parseFloat(cmdOpts.quantity),
+    );
+    console.log("Product added to saved list.");
+  });
+
+savedListCmd
   .command("add <id>")
   .description("Add every product in a saved shopping list to the cart")
   .requiredOption(

@@ -151,6 +151,22 @@ savedListCmd
   });
 
 savedListCmd
+  .command("remove-product <list-id> <product-id>")
+  .description("Remove a product from a saved shopping list")
+  .requiredOption("--confirmation <text>", "Must be exactly UPDATE SAVED LIST")
+  .action(async (listId: string, productId: string, cmdOpts) => {
+    if (cmdOpts.confirmation !== "UPDATE SAVED LIST") {
+      throw new Error("Confirmation must be exactly UPDATE SAVED LIST");
+    }
+    const client = makeClient();
+    await client.removeProductFromSavedList(
+      parseInt(listId),
+      parseInt(productId),
+    );
+    console.log("Product removed from saved list.");
+  });
+
+savedListCmd
   .command("add <id>")
   .description("Add every product in a saved shopping list to the cart")
   .requiredOption(

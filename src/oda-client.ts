@@ -647,6 +647,26 @@ export class OdaClient {
     }
   }
 
+  async removeProductFromSavedList(
+    listId: number,
+    productId: number,
+  ): Promise<void> {
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new Error("Product ID must be a positive integer");
+    }
+    const response = await this.apiPost(
+      `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/products/`,
+      [{ productId, quantity: -1, delete: true }],
+      `${OdaClient.BASE_URL}/account/lists/details/${listId}/`,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Remove product from saved list failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
+    }
+  }
+
   async addSavedListToCart(listId: number): Promise<void> {
     const list = await this.getSavedListDetails(listId);
     const items = list.items

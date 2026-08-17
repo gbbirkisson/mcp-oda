@@ -171,6 +171,33 @@ export class OdaServer {
     );
 
     this.mcpServer.registerTool(
+      "saved_list_remove_product",
+      {
+        description:
+          "Remove a product from a saved Oda shopping list. This changes the saved list: call only after the user has explicitly confirmed the specific removal in the current conversation.",
+        inputSchema: {
+          list_id: z.number().int().positive(),
+          product_id: z.number().int().positive(),
+          confirmation: z
+            .literal("UPDATE SAVED LIST")
+            .describe(
+              "Must be the exact value UPDATE SAVED LIST; provide it only after explicit current-conversation user confirmation.",
+            ),
+        },
+      },
+      this.toolHandler(
+        "saved_list_remove_product",
+        async ({ list_id, product_id }) => {
+          await this.getClient().removeProductFromSavedList(
+            list_id,
+            product_id,
+          );
+          return this.textResult("Product removed from saved list");
+        },
+      ),
+    );
+
+    this.mcpServer.registerTool(
       "saved_list_add_to_cart",
       {
         description:

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/gbbirkisson/mcp-oda/compare/0.5.0...0.6.0) (2026-08-18)
+
+
+### Features
+
+* add saved-list management and shopping assistance ([#137](https://github.com/gbbirkisson/mcp-oda/issues/137)) ([513b5f6](https://github.com/gbbirkisson/mcp-oda/commit/513b5f6c91bb121d5c421e084029f30091e4db65))
+
+
+### Bug Fixes
+
+* **deps:** update dependency vitest to v4.1.11 ([#139](https://github.com/gbbirkisson/mcp-oda/issues/139)) ([ff1e8e8](https://github.com/gbbirkisson/mcp-oda/commit/ff1e8e8a6737d9b723d0c587c4cc57aa72cf3ed6))
+
 ## [0.5.0](https://github.com/gbbirkisson/mcp-oda/compare/0.4.5...0.5.0) (2026-08-12)
 
 

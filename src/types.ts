@@ -52,3 +52,28 @@ export interface RecipeDetail {
   instructions: string[];
   image_url?: string;
 }
+
+export interface SavedList {
+  id: number;
+  title: string;
+  description: string;
+  number_of_products: number;
+  number_of_items: number;
+  total_quantity: number;
+  last_bought_date?: string;
+  url: string;
+}
+
+export interface SavedListItem {
+  id: number;
+  name: string;
+  subtitle: string;
+  quantity: number;
+  price: number;
+  relative_price: number;
+  relative_price_unit: string;
+}
+
+export interface SavedListDetail extends SavedList {
+  items: SavedListItem[];
+}

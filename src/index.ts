@@ -49,11 +49,18 @@ authCmd
   .command("login")
   .description("Log in with email and password")
   .option("--user <email>", "Email for login")
-  .option("--pass <password>", "Password for login")
+  .option(
+    "--pass <password>",
+    "Password for login (avoid: visible in shell history and process arguments)",
+  )
+  .option("--pass-stdin", "Read the password from standard input")
   .action(async (cmdOpts) => {
     const opts = program.opts();
+    const password = cmdOpts.passStdin
+      ? fs.readFileSync(0, "utf-8").replace(/\r?\n$/, "")
+      : cmdOpts.pass;
     const server = new OdaServer(opts.dataDir);
-    await server.auth(cmdOpts.user, cmdOpts.pass);
+    await server.auth(cmdOpts.user, password);
   });
 
 authCmd
@@ -100,6 +107,79 @@ productCmd
     const client = makeClient();
     await client.addToCart(parseInt(id), parseInt(cmdOpts.count));
     console.log("Product added to cart.");
+  });
+
+// --- saved-list commands ---
+const savedListCmd = program
+  .command("saved-list")
+  .description("Saved Oda shopping-list commands");
+
+savedListCmd
+  .command("list")
+  .description("List saved shopping lists")
+  .action(async () => {
+    const client = makeClient();
+    console.log(JSON.stringify(await client.getSavedLists(), null, 2));
+  });
+
+savedListCmd
+  .command("details <id>")
+  .description("Show products and quantities in a saved shopping list")
+  .action(async (id: string) => {
+    const client = makeClient();
+    console.log(
+      JSON.stringify(await client.getSavedListDetails(parseInt(id)), null, 2),
+    );
+  });
+
+savedListCmd
+  .command("add-product <list-id> <product-id>")
+  .description("Add a product to a saved shopping list")
+  .option("--quantity <number>", "Quantity to add", "1")
+  .requiredOption("--confirmation <text>", "Must be exactly UPDATE SAVED LIST")
+  .action(async (listId: string, productId: string, cmdOpts) => {
+    if (cmdOpts.confirmation !== "UPDATE SAVED LIST") {
+      throw new Error("Confirmation must be exactly UPDATE SAVED LIST");
+    }
+    const client = makeClient();
+    await client.addProductToSavedList(
+      parseInt(listId),
+      parseInt(productId),
+      parseFloat(cmdOpts.quantity),
+    );
+    console.log("Product added to saved list.");
+  });
+
+savedListCmd
+  .command("remove-product <list-id> <product-id>")
+  .description("Remove a product from a saved shopping list")
+  .requiredOption("--confirmation <text>", "Must be exactly UPDATE SAVED LIST")
+  .action(async (listId: string, productId: string, cmdOpts) => {
+    if (cmdOpts.confirmation !== "UPDATE SAVED LIST") {
+      throw new Error("Confirmation must be exactly UPDATE SAVED LIST");
+    }
+    const client = makeClient();
+    await client.removeProductFromSavedList(
+      parseInt(listId),
+      parseInt(productId),
+    );
+    console.log("Product removed from saved list.");
+  });
+
+savedListCmd
+  .command("add <id>")
+  .description("Add every product in a saved shopping list to the cart")
+  .requiredOption(
+    "--confirmation <text>",
+    "Must be exactly ADD SAVED LIST TO CART",
+  )
+  .action(async (id: string, cmdOpts) => {
+    if (cmdOpts.confirmation !== "ADD SAVED LIST TO CART") {
+      throw new Error("Confirmation must be exactly ADD SAVED LIST TO CART");
+    }
+    const client = makeClient();
+    await client.addSavedListToCart(parseInt(id));
+    console.log("Saved list added to cart.");
   });
 
 // --- cart commands ---

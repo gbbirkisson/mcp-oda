@@ -6,6 +6,9 @@ import {
   RecipeFilter,
   RecipePage,
   RecipeDetail,
+  SavedList,
+  SavedListDetail,
+  SavedListItem,
 } from "./types.js";
 import fs from "fs";
 
@@ -276,6 +279,7 @@ export class OdaClient {
   private loadCookies() {
     try {
       if (!fs.existsSync(this.cookiePath)) return;
+      fs.chmodSync(this.cookiePath, 0o600);
       const raw = JSON.parse(fs.readFileSync(this.cookiePath, "utf-8"));
 
       if (Array.isArray(raw)) {
@@ -297,7 +301,15 @@ export class OdaClient {
   }
 
   saveCookies() {
-    fs.writeFileSync(this.cookiePath, JSON.stringify(this.cookies, null, 2));
+    // Session cookies authenticate the Oda account; keep them private to the
+    // local account even when the host's default umask is permissive.
+    if (fs.existsSync(this.cookiePath)) {
+      fs.chmodSync(this.cookiePath, 0o600);
+    }
+    fs.writeFileSync(this.cookiePath, JSON.stringify(this.cookies, null, 2), {
+      mode: 0o600,
+    });
+    fs.chmodSync(this.cookiePath, 0o600);
   }
 
   private updateCookies(response: Response) {
@@ -414,15 +426,36 @@ export class OdaClient {
 
   // --- HTML parsing ---
 
+  private extractJsonLd(html: string): any[] {
+    const results: any[] = [];
+    const regex = /<script type="application\/ld\+json">(.*?)<\/script>/gs;
+    let m;
+    while ((m = regex.exec(html)) !== null) {
+      try {
+        results.push(JSON.parse(m[1]));
+      } catch {
+        // skip malformed
+      }
+    }
+    return results;
+  }
+
   async fetchNextData(url: string): Promise<any | null> {
     const response = await this.getFollowRedirects(url);
     if (response.status === 425) {
-      throw new Error(
-        "Server returned 425 Too Early. Please try again later.",
-      );
+      throw new Error("Server returned 425 Too Early. Please try again later.");
     }
     const html = await response.text();
     return extractNextData(html);
+  }
+
+  async fetchJsonLd(url: string): Promise<any[]> {
+    const response = await this.getFollowRedirects(url);
+    if (response.status === 425) {
+      throw new Error("Server returned 425 Too Early. Please try again later.");
+    }
+    const html = await response.text();
+    return this.extractJsonLd(html);
   }
 
   // --- Dump helper (for CLI discovery) ---
@@ -465,13 +498,237 @@ export class OdaClient {
 
   // --- Cart methods ---
 
+  async getFrequentProducts(
+    limit = 20,
+    maxOrders = 30,
+  ): Promise<
+    Array<{
+      id: number;
+      name: string;
+      times_ordered: number;
+      total_quantity: number;
+    }>
+  > {
+    let url: string | null = `${OdaClient.API_BASE}/api/v1/orders/`;
+    const orderNumbers: string[] = [];
+    const visitedPages = new Set<string>();
+
+    // The order-list endpoint is paginated by date. Only request enough order
+    // details to answer this explicit, read-only frequent-purchases query.
+    while (url && orderNumbers.length < maxOrders) {
+      if (visitedPages.has(url)) {
+        throw new Error(
+          `Get frequent products failed: order pagination repeated URL ${url}`,
+        );
+      }
+      visitedPages.add(url);
+      const response = await this.apiGet(url);
+      if (!response.ok) {
+        await this.throwApiError(
+          "Get frequent products order list",
+          response,
+        );
+      }
+      const page = (await response.json()) as any;
+      for (const month of page.results || []) {
+        for (const order of month.orders || []) {
+          if (order.order_number && orderNumbers.length < maxOrders) {
+            orderNumbers.push(order.order_number);
+          }
+        }
+      }
+      url = page.has_more && page.get_more_url ? page.get_more_url : null;
+    }
+
+    const products = new Map<
+      number,
+      {
+        id: number;
+        name: string;
+        times_ordered: number;
+        total_quantity: number;
+      }
+    >();
+    for (const orderNumber of orderNumbers) {
+      const response = await this.apiGet(
+        `${OdaClient.API_BASE}/api/v1/orders/${encodeURIComponent(orderNumber)}/`,
+      );
+      if (!response.ok) {
+        await this.throwApiError(
+          `Get frequent products order ${orderNumber}`,
+          response,
+        );
+      }
+      const detail = (await response.json()) as any;
+      for (const group of detail.items?.item_groups || []) {
+        for (const item of group.items || []) {
+          if (!Number.isFinite(item.product_id) || !item.description) continue;
+          const existing = products.get(item.product_id) || {
+            id: item.product_id,
+            name: item.description,
+            times_ordered: 0,
+            total_quantity: 0,
+          };
+          existing.times_ordered += 1;
+          existing.total_quantity += Number(item.quantity) || 0;
+          products.set(item.product_id, existing);
+        }
+      }
+    }
+
+    return [...products.values()]
+      .sort(
+        (a, b) =>
+          b.times_ordered - a.times_ordered ||
+          b.total_quantity - a.total_quantity ||
+          a.name.localeCompare(b.name),
+      )
+      .slice(0, limit);
+  }
+
+  async getCartRecommendations(): Promise<unknown> {
+    const response = await this.apiGet(
+      `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
+    );
+    if (!response.ok) {
+      await this.throwApiError("Get cart recommendations", response);
+    }
+    return response.json();
+  }
+
+  private async throwApiError(
+    operation: string,
+    response: Response,
+  ): Promise<never> {
+    const body = await response.text().catch(() => "");
+    const authHint =
+      response.status === 401 || response.status === 403
+        ? " (authentication may be required or expired)"
+        : "";
+    throw new Error(
+      `${operation} failed: HTTP ${response.status}${authHint}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+    );
+  }
+
+  private parseSavedList(data: any): SavedList {
+    return {
+      id: Number(data.id),
+      title: data.title || "Untitled list",
+      description: data.description || "",
+      number_of_products: Number(data.number_of_products) || 0,
+      number_of_items: Number(data.number_of_items) || 0,
+      total_quantity: Number(data.total_quantity) || 0,
+      ...(data.last_bought_date
+        ? { last_bought_date: data.last_bought_date }
+        : {}),
+      url:
+        data.url || `${OdaClient.BASE_URL}/account/lists/details/${data.id}/`,
+    };
+  }
+
+  async getSavedLists(): Promise<SavedList[]> {
+    const response = await this.apiGet(
+      `${OdaClient.API_BASE}/api/v1/product-lists/?filter=product_lists`,
+    );
+    if (!response.ok) {
+      throw new Error(`Get saved lists failed: HTTP ${response.status}`);
+    }
+    const data = (await response.json()) as any;
+    return (data.results || []).map((list: any) => this.parseSavedList(list));
+  }
+
+  async getSavedListDetails(listId: number): Promise<SavedListDetail> {
+    const response = await this.apiGet(
+      `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/`,
+    );
+    if (!response.ok) {
+      throw new Error(`Get saved list failed: HTTP ${response.status}`);
+    }
+    const data = (await response.json()) as any;
+    const items: SavedListItem[] = (data.items || [])
+      .filter((item: any) => Number.isFinite(item.product?.id))
+      .map((item: any) => {
+        const product = item.product;
+        const unit = product.unit_price_quantity_abbreviation || "";
+        return {
+          id: product.id,
+          name: product.full_name || product.name || "Unknown",
+          subtitle: product.name_extra || "",
+          quantity: Number(item.quantity) || 0,
+          price: parseFloat(product.gross_price) || 0,
+          relative_price: parseFloat(product.gross_unit_price) || 0,
+          relative_price_unit: unit ? `/${unit}` : "",
+        };
+      });
+    return { ...this.parseSavedList(data), items };
+  }
+
+  async addProductToSavedList(
+    listId: number,
+    productId: number,
+    quantity = 1,
+  ): Promise<void> {
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new Error("Product ID must be a positive integer");
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error("Quantity must be positive");
+    }
+    const response = await this.apiPost(
+      `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/products/`,
+      [{ productId, quantity, delete: false }],
+      `${OdaClient.BASE_URL}/account/lists/details/${listId}/`,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Add product to saved list failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
+    }
+  }
+
+  async removeProductFromSavedList(
+    listId: number,
+    productId: number,
+  ): Promise<void> {
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new Error("Product ID must be a positive integer");
+    }
+    const response = await this.apiPost(
+      `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/products/`,
+      [{ productId, quantity: -1, delete: true }],
+      `${OdaClient.BASE_URL}/account/lists/details/${listId}/`,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Remove product from saved list failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
+    }
+  }
+
+  async addSavedListToCart(listId: number): Promise<void> {
+    const list = await this.getSavedListDetails(listId);
+    const items = list.items
+      .filter((item) => item.id > 0 && item.quantity > 0)
+      .map((item) => ({ product_id: item.id, quantity: item.quantity }));
+    if (items.length === 0) {
+      throw new Error(`Saved list ${listId} has no products to add`);
+    }
+    const response = await this.apiPost(OdaClient.CART_ITEMS_API, { items });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Add saved list to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
+    }
+  }
+
   async getCartContents(): Promise<CartItem[]> {
     // Cart data is not in __NEXT_DATA__, use the REST API directly
     const response = await this.apiGet(OdaClient.CART_API);
     if (response.status === 425) {
-      throw new Error(
-        "Server returned 425 Too Early. Please try again later.",
-      );
+      throw new Error("Server returned 425 Too Early. Please try again later.");
     }
     if (!response.ok) {
       return [];
@@ -503,8 +760,7 @@ export class OdaClient {
       const quantity = item.quantity || 1;
       const price = parseFloat(product.gross_price) || 0;
       const unitPrice = parseFloat(product.gross_unit_price) || 0;
-      const unitPriceUnit =
-        product.unit_price_quantity_abbreviation || "";
+      const unitPriceUnit = product.unit_price_quantity_abbreviation || "";
 
       items.push({
         id: productId,
@@ -521,13 +777,14 @@ export class OdaClient {
   }
 
   async addToCart(productId: number, count = 1): Promise<void> {
-    const response = await this.apiPost(
-      OdaClient.CART_ITEMS_API,
-      { items: [{ product_id: productId, quantity: count }] },
-    );
+    const response = await this.apiPost(OdaClient.CART_ITEMS_API, {
+      items: [{ product_id: productId, quantity: count }],
+    });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Add to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+      throw new Error(
+        `Add to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
     }
   }
 
@@ -539,7 +796,9 @@ export class OdaClient {
     );
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Remove from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+      throw new Error(
+        `Remove from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
     }
   }
 
@@ -551,13 +810,19 @@ export class OdaClient {
     );
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Clear cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+      throw new Error(
+        `Clear cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
     }
   }
 
   // --- Recipe methods ---
 
-  async searchRecipes(query?: string | null, page = 1, filterIds?: string[]): Promise<RecipePage> {
+  async searchRecipes(
+    query?: string | null,
+    page = 1,
+    filterIds?: string[],
+  ): Promise<RecipePage> {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (page > 1) params.set("page", String(page));
@@ -583,8 +848,31 @@ export class OdaClient {
   }
 
   async getRecipeDetails(recipeId: number): Promise<RecipeDetail> {
-    const data = await this.getRecipeData(recipeId);
-    return this.createRecipeDetailFromApi(data);
+    try {
+      const data = await this.getRecipeData(recipeId);
+      return this.createRecipeDetailFromApi(data);
+    } catch {
+      // Recipe pages are now also App Router pages. JSON-LD preserves the
+      // public recipe detail needed for read-only lookups, but is deliberately
+      // not used for cart mutation because it has no product IDs.
+      const jsonLd = await this.fetchJsonLd(
+        `${OdaClient.BASE_URL}/recipes/${recipeId}`,
+      );
+      const recipe = jsonLd.find((item) => item?.["@type"] === "Recipe");
+      if (!recipe)
+        throw new Error(`Could not load recipe page for ID ${recipeId}`);
+      return {
+        name: recipe.name || "Unknown",
+        description: recipe.description || "",
+        ingredients: recipe.recipeIngredient || [],
+        instructions: (recipe.recipeInstructions || [])
+          .map((step: any) =>
+            typeof step === "string" ? step : step.text || "",
+          )
+          .filter(Boolean),
+        image_url: Array.isArray(recipe.image) ? recipe.image[0] : recipe.image,
+      };
+    }
   }
 
   private createRecipeDetailFromApi(data: any): RecipeDetail {
@@ -605,17 +893,20 @@ export class OdaClient {
     );
 
     // Instructions
-    const instructions: string[] = (
-      data.instructions?.instructions || []
-    ).map((step: any) => step.text || "");
+    const instructions: string[] = (data.instructions?.instructions || []).map(
+      (step: any) => step.text || "",
+    );
 
-    return { name, description, ingredients, instructions, image_url: imageUrl };
+    return {
+      name,
+      description,
+      ingredients,
+      instructions,
+      image_url: imageUrl,
+    };
   }
 
-  async addRecipeToCart(
-    recipeId: number,
-    portions: number,
-  ): Promise<void> {
+  async addRecipeToCart(recipeId: number, portions: number): Promise<void> {
     const data = await this.getRecipeData(recipeId);
     const ingredients: any[] = data.ingredients || [];
     const items = ingredients
@@ -633,7 +924,9 @@ export class OdaClient {
     );
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Add recipe to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+      throw new Error(
+        `Add recipe to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
     }
   }
 
@@ -644,7 +937,9 @@ export class OdaClient {
     );
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`Remove recipe from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`);
+      throw new Error(
+        `Remove recipe from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
+      );
     }
   }
 
@@ -679,8 +974,7 @@ export class OdaClient {
     try {
       const user = findDehydratedQuery(nextData, "user");
       if (user) {
-        const name =
-          `${user.firstName || ""} ${user.lastName || ""}`.trim();
+        const name = `${user.firstName || ""} ${user.lastName || ""}`.trim();
         return name || user.email || null;
       }
     } catch {

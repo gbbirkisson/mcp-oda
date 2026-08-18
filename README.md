@@ -40,6 +40,7 @@ This MCP server provides tools to programmatically interact with Oda's grocery s
 
 - **Search products** - Search for groceries with support for Norwegian terms
 - **Browse recipes** - Search, filter, and view recipe details
+- **Saved shopping lists** - View your saved lists and their products
 - **Manage shopping cart** - View cart contents, add/remove items, add recipe ingredients
 - **CLI access** - All operations available as CLI subcommands in addition to MCP tools
 - **Session persistence** - Maintains login session across restarts
@@ -55,7 +56,9 @@ This project requires Node.js (v18+).
 Authenticate with your Oda account:
 
 ```bash
-npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+unset ODA_PASSWORD
 ```
 
 Verify your login status:
@@ -81,6 +84,16 @@ npx github:gbbirkisson/mcp-oda product search melk
 npx github:gbbirkisson/mcp-oda product search melk --page 2
 npx github:gbbirkisson/mcp-oda product add 132
 
+# Saved shopping lists
+npx github:gbbirkisson/mcp-oda saved-list list
+npx github:gbbirkisson/mcp-oda saved-list details 123
+# Adds a product to a saved list; requires an explicit confirmation string
+npx github:gbbirkisson/mcp-oda saved-list add-product 123 456 --confirmation "UPDATE SAVED LIST"
+# Removes a product from a saved list; requires an explicit confirmation string
+npx github:gbbirkisson/mcp-oda saved-list remove-product 123 456 --confirmation "UPDATE SAVED LIST"
+# Adds every list item to the cart; requires an explicit confirmation string
+npx github:gbbirkisson/mcp-oda saved-list add 123 --confirmation "ADD SAVED LIST TO CART"
+
 # Cart
 npx github:gbbirkisson/mcp-oda cart list
 npx github:gbbirkisson/mcp-oda cart remove 132
@@ -93,7 +106,9 @@ npx github:gbbirkisson/mcp-oda recipe add 123 --portions 4
 npx github:gbbirkisson/mcp-oda recipe remove 123
 
 # Authentication
-npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+unset ODA_PASSWORD
 npx github:gbbirkisson/mcp-oda auth logout
 npx github:gbbirkisson/mcp-oda auth user
 
@@ -142,6 +157,8 @@ If your login session is not persisting between runs:
    ```
 2. Re-authenticate:
    ```bash
-   npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass yourpassword
+   read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+   printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
+   unset ODA_PASSWORD
    ```
 3. Make sure you're using the same `--data-dir` for all commands if you've overridden the default.

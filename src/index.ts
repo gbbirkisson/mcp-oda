@@ -182,6 +182,30 @@ savedListCmd
     console.log("Saved list added to cart.");
   });
 
+// --- purchases commands ---
+const purchasesCmd = program
+  .command("purchases")
+  .description("Purchase-history commands");
+
+purchasesCmd
+  .command("frequent")
+  .description("Show the most frequently purchased products")
+  .option("--limit <number>", "Number of products to show", "20")
+  .option("--max-orders <number>", "How many recent orders to read", "30")
+  .action(async (cmdOpts) => {
+    const client = makeClient();
+    console.log(
+      JSON.stringify(
+        await client.getFrequentProducts(
+          parseInt(cmdOpts.limit),
+          parseInt(cmdOpts.maxOrders),
+        ),
+        null,
+        2,
+      ),
+    );
+  });
+
 // --- cart commands ---
 const cartCmd = program.command("cart").description("Cart commands");
 
@@ -207,10 +231,22 @@ cartCmd
 cartCmd
   .command("clear")
   .description("Clear the cart")
-  .action(async () => {
+  .requiredOption("--confirmation <text>", "Must be exactly CLEAR CART")
+  .action(async (cmdOpts) => {
+    if (cmdOpts.confirmation !== "CLEAR CART") {
+      throw new Error("Confirmation must be exactly CLEAR CART");
+    }
     const client = makeClient();
     await client.clearCart();
     console.log("Cart cleared.");
+  });
+
+cartCmd
+  .command("recommendations")
+  .description("Show Oda's current cart recommendations")
+  .action(async () => {
+    const client = makeClient();
+    console.log(JSON.stringify(await client.getCartRecommendations(), null, 2));
   });
 
 // --- recipe commands ---

@@ -239,6 +239,29 @@ Filter IDs are formatted as `name:value` (e.g., `diet:43`).
 }
 ```
 
+### JSON-LD fallback
+
+Recipe pages also carry a `schema.org` `Recipe` node in a
+`<script type="application/ld+json">` tag. It survives hydration-layout changes,
+so it is used as a read-only fallback when no `recipeDetailApi` query is found:
+
+```json
+{
+  "@type": "Recipe",
+  "name": "Pizza Parma",
+  "description": "Description text...",
+  "recipeIngredient": ["1 stk pizzabunn"],
+  "recipeInstructions": [{"@type": "HowToStep", "text": "Step text..."}],
+  "image": ["https://..."]
+}
+```
+
+A tag may hold a single node, an array of nodes, or an `@graph` wrapper, so all
+three must be flattened before looking for `@type == "Recipe"`.
+
+**This payload cannot drive cart mutation**: `recipeIngredient` is free text with
+no product IDs. `addRecipeToCart` therefore uses only the hydration path.
+
 ## Cart
 
 Cart data is **not in the page hydration data** — it's loaded client-side. Use the REST API directly.
@@ -347,6 +370,116 @@ Keyed by `recipe_id` rather than `product_id`:
 {"items": [{"recipe_id": 608, "quantity": -1, "delete": true}]}
 ```
 
+### Cart Recommendations
+
+**GET** `https://oda.com/api/v1/cart/recommendations/`
+
+Returns recommended products for the current cart. The wrapper varies by
+campaign (observed nested under `groups[].items[].product`), so consumers walk
+the payload for product-shaped nodes rather than relying on one fixed path.
+Product nodes use the same snake_case fields as the cart (`id`, `full_name`,
+`name_extra`, `gross_price`, `gross_unit_price`,
+`unit_price_quantity_abbreviation`). An empty cart can legitimately return no
+products.
+
+## Order History
+
+### List Orders
+
+**GET** `https://oda.com/api/v1/orders/`
+
+Paginated by date, **not** by page number:
+
+```json
+{
+  "results": [
+    {"month": "2026-08", "orders": [{"order_number": "12345678", "...": "..."}]}
+  ],
+  "has_more": true,
+  "get_more_url": "https://oda.com/api/v1/orders/?before=..."
+}
+```
+
+Follow `get_more_url` while `has_more` is true. The URL comes out of the response
+body, so resolve it against `https://oda.com` and reject anything off-origin —
+these requests carry session cookies. A repeated URL means the pagination
+contract broke and is treated as an error rather than looped on.
+
+### Order Detail
+
+**GET** `https://oda.com/api/v1/orders/{order_number}/`
+
+```json
+{
+  "items": {
+    "item_groups": [
+      {
+        "items": [
+          {"product_id": 132, "description": "Tine Melk", "quantity": 2}
+        ]
+      }
+    ]
+  }
+}
+```
+
+Items are split across `item_groups` (standalone items vs. items grouped by
+recipe), so **the same `product_id` can appear in more than one group of a single
+order**. Deduplicate per order when counting how many orders contained a product.
+
+## Saved Product Lists
+
+### List Saved Lists
+
+**GET** `https://oda.com/api/v1/product-lists/?filter=product_lists`
+
+```json
+{
+  "results": [
+    {
+      "id": 123,
+      "title": "Ukesmeny",
+      "description": "",
+      "number_of_products": 12,
+      "number_of_items": 14,
+      "total_quantity": 14,
+      "last_bought_date": "2026-08-01",
+      "url": "https://oda.com/no/account/lists/details/123/"
+    }
+  ]
+}
+```
+
+### Saved List Detail
+
+**GET** `https://oda.com/api/v1/product-lists/{id}/`
+
+Same fields as above plus `items[]`, each with a `quantity` and a nested
+`product` using the cart's snake_case fields.
+
+### Add / Remove Products
+
+**POST** `https://oda.com/api/v1/product-lists/{id}/products/`
+
+Unlike the cart endpoints, the body is a **bare array** and its keys are
+**camelCase**:
+
+```json
+[{"productId": 456, "quantity": 2, "delete": false}]
+```
+
+Removal sets the `delete` flag:
+
+```json
+[{"productId": 456, "quantity": -1, "delete": true}]
+```
+
+`Referer` must be the list page (`/no/account/lists/details/{id}/`) or the
+request is rejected.
+
+There is no "add list to cart" endpoint — read the list detail and POST its
+items to `/api/v1/cart/items/` as ordinary `product_id`/`quantity` pairs.
+
 ## Authentication
 
 ### CSRF Token
@@ -386,8 +519,11 @@ Note its `queryKey` is a plain string array (`["user"]`), not the
 
 - Search and recipe data use **camelCase** field names (from React/Next.js)
 - Cart REST API uses **snake_case** field names (Django backend)
+- The product-list mutation endpoint is the exception: a bare array with
+  **camelCase** keys (`productId`, `delete`)
 - The `425 Too Early` status is returned when the server is overloaded
-- Pagination is page-number based (`?page=2`), not cursor-based
+- Pagination is page-number based (`?page=2`), not cursor-based — except
+  `/api/v1/orders/`, which is date-cursored via `get_more_url`
 - All requests need the `csrftoken` cookie — obtained from any GET request
 - Cart `quantity` values are **deltas**, not absolute counts
 - Recipe URLs redirect to a slug form (`/no/recipes/608` →

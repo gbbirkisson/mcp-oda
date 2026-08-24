@@ -9,6 +9,8 @@ import {
   SavedList,
   SavedListDetail,
   SavedListItem,
+  ProductSummary,
+  CartRecommendation,
 } from "./types.js";
 import fs from "fs";
 
@@ -180,7 +182,12 @@ function requireSearchData(
 }
 
 export function parseProductPage(url: string, nextData: any): ProductPage {
-  const data = requireSearchData(url, nextData, "product", "searchpageresponse");
+  const data = requireSearchData(
+    url,
+    nextData,
+    "product",
+    "searchpageresponse",
+  );
   const items: SearchResult[] = [];
 
   for (const item of data.items) {
@@ -276,10 +283,25 @@ export class OdaClient {
 
   // --- Cookie management ---
 
+  // Session cookies authenticate the Oda account, so keep the file private to
+  // the local account even when the host's default umask is permissive. This
+  // is best-effort: a file the current user cannot chmod (shared data-dir,
+  // changed container UID, root-created file) must still be usable rather than
+  // silently logging the user out.
+  private restrictCookiePermissions() {
+    try {
+      if (fs.existsSync(this.cookiePath)) {
+        fs.chmodSync(this.cookiePath, 0o600);
+      }
+    } catch {
+      // Ignore: tightening permissions is a hardening step, not a requirement
+    }
+  }
+
   private loadCookies() {
     try {
       if (!fs.existsSync(this.cookiePath)) return;
-      fs.chmodSync(this.cookiePath, 0o600);
+      this.restrictCookiePermissions();
       const raw = JSON.parse(fs.readFileSync(this.cookiePath, "utf-8"));
 
       if (Array.isArray(raw)) {
@@ -301,15 +323,13 @@ export class OdaClient {
   }
 
   saveCookies() {
-    // Session cookies authenticate the Oda account; keep them private to the
-    // local account even when the host's default umask is permissive.
-    if (fs.existsSync(this.cookiePath)) {
-      fs.chmodSync(this.cookiePath, 0o600);
-    }
+    // Tighten before writing so an existing world-readable file is never
+    // written through, and again after in case the file was just created.
+    this.restrictCookiePermissions();
     fs.writeFileSync(this.cookiePath, JSON.stringify(this.cookies, null, 2), {
       mode: 0o600,
     });
-    fs.chmodSync(this.cookiePath, 0o600);
+    this.restrictCookiePermissions();
   }
 
   private updateCookies(response: Response) {
@@ -428,13 +448,29 @@ export class OdaClient {
 
   private extractJsonLd(html: string): any[] {
     const results: any[] = [];
-    const regex = /<script type="application\/ld\+json">(.*?)<\/script>/gs;
+    // Tolerate attribute order, quoting and extra attributes on the tag.
+    const regex =
+      /<script[^>]*\btype\s*=\s*["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis;
     let m;
     while ((m = regex.exec(html)) !== null) {
+      let parsed: unknown;
       try {
-        results.push(JSON.parse(m[1]));
+        parsed = JSON.parse(m[1]);
       } catch {
-        // skip malformed
+        continue; // skip malformed
+      }
+      // One tag may hold a single node, an array of nodes, or an @graph
+      // wrapper, so flatten to a flat list of nodes callers can search.
+      const queue: unknown[] = [parsed];
+      while (queue.length > 0) {
+        const node = queue.shift();
+        if (Array.isArray(node)) {
+          queue.push(...node);
+        } else if (node && typeof node === "object") {
+          results.push(node);
+          const graph = (node as Record<string, unknown>)["@graph"];
+          if (Array.isArray(graph)) queue.push(...graph);
+        }
       }
     }
     return results;
@@ -524,10 +560,7 @@ export class OdaClient {
       visitedPages.add(url);
       const response = await this.apiGet(url);
       if (!response.ok) {
-        await this.throwApiError(
-          "Get frequent products order list",
-          response,
-        );
+        await this.throwApiError("Get frequent products order list", response);
       }
       const page = (await response.json()) as any;
       for (const month of page.results || []) {
@@ -537,7 +570,9 @@ export class OdaClient {
           }
         }
       }
-      url = page.has_more && page.get_more_url ? page.get_more_url : null;
+      const next =
+        page.has_more && page.get_more_url ? String(page.get_more_url) : null;
+      url = next ? OdaClient.resolveOdaUrl(next, "order pagination URL") : null;
     }
 
     const products = new Map<
@@ -549,29 +584,48 @@ export class OdaClient {
         total_quantity: number;
       }
     >();
-    for (const orderNumber of orderNumbers) {
-      const response = await this.apiGet(
-        `${OdaClient.API_BASE}/api/v1/orders/${encodeURIComponent(orderNumber)}/`,
+    // Order details are fetched a few at a time: sequential requests make the
+    // upper bound (maxOrders) slow enough to time out a tool call, while an
+    // unbounded fan-out would hammer the API. Chunking keeps the aggregation
+    // order deterministic and memory bounded.
+    const CONCURRENCY = 5;
+    for (let i = 0; i < orderNumbers.length; i += CONCURRENCY) {
+      const details = await Promise.all(
+        orderNumbers.slice(i, i + CONCURRENCY).map(async (orderNumber) => {
+          const response = await this.apiGet(
+            `${OdaClient.API_BASE}/api/v1/orders/${encodeURIComponent(orderNumber)}/`,
+          );
+          if (!response.ok) {
+            await this.throwApiError(
+              `Get frequent products order ${orderNumber}`,
+              response,
+            );
+          }
+          return (await response.json()) as any;
+        }),
       );
-      if (!response.ok) {
-        await this.throwApiError(
-          `Get frequent products order ${orderNumber}`,
-          response,
-        );
-      }
-      const detail = (await response.json()) as any;
-      for (const group of detail.items?.item_groups || []) {
-        for (const item of group.items || []) {
-          if (!Number.isFinite(item.product_id) || !item.description) continue;
-          const existing = products.get(item.product_id) || {
-            id: item.product_id,
-            name: item.description,
-            times_ordered: 0,
-            total_quantity: 0,
-          };
-          existing.times_ordered += 1;
-          existing.total_quantity += Number(item.quantity) || 0;
-          products.set(item.product_id, existing);
+      for (const detail of details) {
+        // An order splits its items into groups (standalone items vs. items
+        // grouped by recipe), so one product can appear in several groups of the
+        // same order. times_ordered counts orders, not line items.
+        const countedInOrder = new Set<number>();
+        for (const group of detail.items?.item_groups || []) {
+          for (const item of group.items || []) {
+            if (!Number.isFinite(item.product_id) || !item.description)
+              continue;
+            const existing = products.get(item.product_id) || {
+              id: item.product_id,
+              name: item.description,
+              times_ordered: 0,
+              total_quantity: 0,
+            };
+            if (!countedInOrder.has(item.product_id)) {
+              existing.times_ordered += 1;
+              countedInOrder.add(item.product_id);
+            }
+            existing.total_quantity += Number(item.quantity) || 0;
+            products.set(item.product_id, existing);
+          }
         }
       }
     }
@@ -586,14 +640,69 @@ export class OdaClient {
       .slice(0, limit);
   }
 
-  async getCartRecommendations(): Promise<unknown> {
+  async getCartRecommendations(): Promise<CartRecommendation[]> {
     const response = await this.apiGet(
       `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
     );
     if (!response.ok) {
       await this.throwApiError("Get cart recommendations", response);
     }
-    return response.json();
+    return OdaClient.collectRecommendedProducts(await response.json());
+  }
+
+  /**
+   * Recommendations arrive wrapped in containers whose shape varies by campaign
+   * (groups, items, promotions), so walk the payload and pick out whatever is
+   * product-shaped rather than hard-coding one wrapper. Returning a normalized,
+   * bounded list also keeps the raw API response out of tool output.
+   */
+  private static collectRecommendedProducts(
+    data: unknown,
+    limit = 20,
+  ): CartRecommendation[] {
+    const found = new Map<number, CartRecommendation>();
+    const queue: unknown[] = [data];
+    while (queue.length > 0 && found.size < limit) {
+      const node = queue.shift();
+      if (Array.isArray(node)) {
+        queue.push(...node);
+        continue;
+      }
+      if (!node || typeof node !== "object") continue;
+      const record = node as Record<string, unknown>;
+      const label = record.full_name ?? record.name;
+      if (Number.isFinite(record.id) && typeof label === "string") {
+        const id = record.id as number;
+        if (!found.has(id)) {
+          found.set(id, OdaClient.parseProductSummary(record));
+        }
+      }
+      queue.push(...Object.values(record));
+    }
+    return [...found.values()];
+  }
+
+  private static assertPositiveListId(listId: number) {
+    if (!Number.isInteger(listId) || listId <= 0) {
+      throw new Error("List ID must be a positive integer");
+    }
+  }
+
+  // Pagination URLs are read out of an API response body. Resolve them against
+  // the Oda origin and refuse anything off-origin, so session cookies are never
+  // sent to a host we did not intend to talk to.
+  private static resolveOdaUrl(candidate: string, what: string): string {
+    const origin = new URL(OdaClient.API_BASE).origin;
+    let resolved: URL;
+    try {
+      resolved = new URL(candidate, `${origin}/`);
+    } catch {
+      throw new Error(`Refused ${what}: ${candidate} is not a valid URL`);
+    }
+    if (resolved.origin !== origin) {
+      throw new Error(`Refused ${what}: ${candidate} is not on ${origin}`);
+    }
+    return resolved.toString();
   }
 
   private async throwApiError(
@@ -608,6 +717,18 @@ export class OdaClient {
     throw new Error(
       `${operation} failed: HTTP ${response.status}${authHint}${body ? ` – ${body.slice(0, 500)}` : ""}`,
     );
+  }
+
+  private static parseProductSummary(product: any): ProductSummary {
+    const unit = product.unit_price_quantity_abbreviation || "";
+    return {
+      id: product.id,
+      name: product.full_name || product.name || "Unknown",
+      subtitle: product.name_extra || "",
+      price: parseFloat(product.gross_price) || 0,
+      relative_price: parseFloat(product.gross_unit_price) || 0,
+      relative_price_unit: unit ? `/${unit}` : "",
+    };
   }
 
   private parseSavedList(data: any): SavedList {
@@ -631,35 +752,27 @@ export class OdaClient {
       `${OdaClient.API_BASE}/api/v1/product-lists/?filter=product_lists`,
     );
     if (!response.ok) {
-      throw new Error(`Get saved lists failed: HTTP ${response.status}`);
+      await this.throwApiError("Get saved lists", response);
     }
     const data = (await response.json()) as any;
     return (data.results || []).map((list: any) => this.parseSavedList(list));
   }
 
   async getSavedListDetails(listId: number): Promise<SavedListDetail> {
+    OdaClient.assertPositiveListId(listId);
     const response = await this.apiGet(
       `${OdaClient.API_BASE}/api/v1/product-lists/${listId}/`,
     );
     if (!response.ok) {
-      throw new Error(`Get saved list failed: HTTP ${response.status}`);
+      await this.throwApiError("Get saved list", response);
     }
     const data = (await response.json()) as any;
     const items: SavedListItem[] = (data.items || [])
       .filter((item: any) => Number.isFinite(item.product?.id))
-      .map((item: any) => {
-        const product = item.product;
-        const unit = product.unit_price_quantity_abbreviation || "";
-        return {
-          id: product.id,
-          name: product.full_name || product.name || "Unknown",
-          subtitle: product.name_extra || "",
-          quantity: Number(item.quantity) || 0,
-          price: parseFloat(product.gross_price) || 0,
-          relative_price: parseFloat(product.gross_unit_price) || 0,
-          relative_price_unit: unit ? `/${unit}` : "",
-        };
-      });
+      .map((item: any) => ({
+        ...OdaClient.parseProductSummary(item.product),
+        quantity: Number(item.quantity) || 0,
+      }));
     return { ...this.parseSavedList(data), items };
   }
 
@@ -668,6 +781,7 @@ export class OdaClient {
     productId: number,
     quantity = 1,
   ): Promise<void> {
+    OdaClient.assertPositiveListId(listId);
     if (!Number.isInteger(productId) || productId <= 0) {
       throw new Error("Product ID must be a positive integer");
     }
@@ -680,10 +794,7 @@ export class OdaClient {
       `${OdaClient.BASE_URL}/account/lists/details/${listId}/`,
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Add product to saved list failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Add product to saved list", response);
     }
   }
 
@@ -691,6 +802,7 @@ export class OdaClient {
     listId: number,
     productId: number,
   ): Promise<void> {
+    OdaClient.assertPositiveListId(listId);
     if (!Number.isInteger(productId) || productId <= 0) {
       throw new Error("Product ID must be a positive integer");
     }
@@ -700,14 +812,12 @@ export class OdaClient {
       `${OdaClient.BASE_URL}/account/lists/details/${listId}/`,
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Remove product from saved list failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Remove product from saved list", response);
     }
   }
 
   async addSavedListToCart(listId: number): Promise<void> {
+    OdaClient.assertPositiveListId(listId);
     const list = await this.getSavedListDetails(listId);
     const items = list.items
       .filter((item) => item.id > 0 && item.quantity > 0)
@@ -717,10 +827,7 @@ export class OdaClient {
     }
     const response = await this.apiPost(OdaClient.CART_ITEMS_API, { items });
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Add saved list to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Add saved list to cart", response);
     }
   }
 
@@ -781,10 +888,7 @@ export class OdaClient {
       items: [{ product_id: productId, quantity: count }],
     });
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Add to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Add to cart", response);
     }
   }
 
@@ -795,10 +899,7 @@ export class OdaClient {
       `${OdaClient.BASE_URL}/cart/`,
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Remove from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Remove from cart", response);
     }
   }
 
@@ -809,10 +910,7 @@ export class OdaClient {
       `${OdaClient.BASE_URL}/cart/`,
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Clear cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Clear cart", response);
     }
   }
 
@@ -839,8 +937,9 @@ export class OdaClient {
     if (!nextData) {
       throw new Error(`Could not load recipe page for ID ${recipeId}`);
     }
-    const data = findDehydratedQuery(nextData, "recipeDetailApi")
-      ?? findDehydratedQuery(nextData, "get-recipe-detail");
+    const data =
+      findDehydratedQuery(nextData, "recipeDetailApi") ??
+      findDehydratedQuery(nextData, "get-recipe-detail");
     if (!data) {
       throw new Error(`Could not find recipe data for ID ${recipeId}`);
     }
@@ -848,31 +947,42 @@ export class OdaClient {
   }
 
   async getRecipeDetails(recipeId: number): Promise<RecipeDetail> {
+    let primaryError: unknown;
     try {
       const data = await this.getRecipeData(recipeId);
       return this.createRecipeDetailFromApi(data);
-    } catch {
-      // Recipe pages are now also App Router pages. JSON-LD preserves the
-      // public recipe detail needed for read-only lookups, but is deliberately
-      // not used for cart mutation because it has no product IDs.
-      const jsonLd = await this.fetchJsonLd(
-        `${OdaClient.BASE_URL}/recipes/${recipeId}`,
-      );
-      const recipe = jsonLd.find((item) => item?.["@type"] === "Recipe");
-      if (!recipe)
-        throw new Error(`Could not load recipe page for ID ${recipeId}`);
-      return {
-        name: recipe.name || "Unknown",
-        description: recipe.description || "",
-        ingredients: recipe.recipeIngredient || [],
-        instructions: (recipe.recipeInstructions || [])
-          .map((step: any) =>
-            typeof step === "string" ? step : step.text || "",
-          )
-          .filter(Boolean),
-        image_url: Array.isArray(recipe.image) ? recipe.image[0] : recipe.image,
-      };
+    } catch (error) {
+      primaryError = error;
     }
+
+    // Recipe pages are now also App Router pages. JSON-LD preserves the public
+    // recipe detail needed for read-only lookups, but is deliberately not used
+    // for cart mutation because it has no product IDs.
+    const jsonLd = await this.fetchJsonLd(
+      `${OdaClient.BASE_URL}/recipes/${recipeId}`,
+    );
+    const recipe = jsonLd.find((item) => item?.["@type"] === "Recipe");
+    if (!recipe) {
+      // Keep the primary failure: it distinguishes an expired session or a 425
+      // from a page that genuinely has no recipe on it.
+      const reason =
+        primaryError instanceof Error
+          ? primaryError.message
+          : String(primaryError);
+      throw new Error(
+        `Could not load recipe page for ID ${recipeId}: ${reason}`,
+        { cause: primaryError },
+      );
+    }
+    return {
+      name: recipe.name || "Unknown",
+      description: recipe.description || "",
+      ingredients: recipe.recipeIngredient || [],
+      instructions: (recipe.recipeInstructions || [])
+        .map((step: any) => (typeof step === "string" ? step : step.text || ""))
+        .filter(Boolean),
+      image_url: Array.isArray(recipe.image) ? recipe.image[0] : recipe.image,
+    };
   }
 
   private createRecipeDetailFromApi(data: any): RecipeDetail {
@@ -923,10 +1033,7 @@ export class OdaClient {
       { items },
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Add recipe to cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Add recipe to cart", response);
     }
   }
 
@@ -936,10 +1043,7 @@ export class OdaClient {
       { items: [{ recipe_id: recipeId, quantity: -1, delete: true }] },
     );
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(
-        `Remove recipe from cart failed: HTTP ${response.status}${body ? ` – ${body.slice(0, 500)}` : ""}`,
-      );
+      await this.throwApiError("Remove recipe from cart", response);
     }
   }
 

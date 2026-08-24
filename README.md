@@ -40,7 +40,9 @@ This MCP server provides tools to programmatically interact with Oda's grocery s
 
 - **Search products** - Search for groceries with support for Norwegian terms
 - **Browse recipes** - Search, filter, and view recipe details
-- **Saved shopping lists** - View your saved lists and their products
+- **Saved shopping lists** - View your saved lists, add or remove products, and
+  import a whole list into the cart
+- **Purchase history** - See your most frequently ordered products
 - **Manage shopping cart** - View cart contents, add/remove items, add recipe ingredients
 - **CLI access** - All operations available as CLI subcommands in addition to MCP tools
 - **Session persistence** - Maintains login session across restarts
@@ -94,10 +96,16 @@ npx github:gbbirkisson/mcp-oda saved-list remove-product 123 456 --confirmation 
 # Adds every list item to the cart; requires an explicit confirmation string
 npx github:gbbirkisson/mcp-oda saved-list add 123 --confirmation "ADD SAVED LIST TO CART"
 
+# Purchase history
+npx github:gbbirkisson/mcp-oda purchases frequent
+npx github:gbbirkisson/mcp-oda purchases frequent --limit 10 --max-orders 50
+
 # Cart
 npx github:gbbirkisson/mcp-oda cart list
+npx github:gbbirkisson/mcp-oda cart recommendations
 npx github:gbbirkisson/mcp-oda cart remove 132
-npx github:gbbirkisson/mcp-oda cart clear
+# Clears the whole cart; requires an explicit confirmation string
+npx github:gbbirkisson/mcp-oda cart clear --confirmation "CLEAR CART"
 
 # Recipes
 npx github:gbbirkisson/mcp-oda recipe search pizza

@@ -111,7 +111,7 @@ export class OdaServer {
       "cart_get_recommendations",
       {
         description:
-          "Read Oda's current cart recommendations. Read-only; recommendations may be empty when the cart is empty.",
+          "Read Oda's current cart recommendations as a normalized product list. Read-only; recommendations may be empty when the cart is empty.",
       },
       this.toolHandler("cart_get_recommendations", async () => {
         return this.jsonResult(await this.getClient().getCartRecommendations());

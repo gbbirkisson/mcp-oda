@@ -64,15 +64,21 @@ export interface SavedList {
   url: string;
 }
 
-export interface SavedListItem {
+/** Normalized product fields shared by list items and recommendations. */
+export interface ProductSummary {
   id: number;
   name: string;
   subtitle: string;
-  quantity: number;
   price: number;
   relative_price: number;
   relative_price_unit: string;
 }
+
+export interface SavedListItem extends ProductSummary {
+  quantity: number;
+}
+
+export type CartRecommendation = ProductSummary;
 
 export interface SavedListDetail extends SavedList {
   items: SavedListItem[];

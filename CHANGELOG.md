@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.0](https://github.com/gbbirkisson/mcp-oda/compare/0.5.0...1.0.0) (2026-08-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* the `cart clear` CLI command now requires --confirmation "CLEAR CART", matching the cart_clear MCP tool. That MCP tool gained its required confirmation argument in #137, which was released as a feature rather than a breaking change.
+
+### Features
+
+* add saved-list management and shopping assistance ([#137](https://github.com/gbbirkisson/mcp-oda/issues/137)) ([513b5f6](https://github.com/gbbirkisson/mcp-oda/commit/513b5f6c91bb121d5c421e084029f30091e4db65))
+
+
+### Bug Fixes
+
+* correct saved-list and purchase-history defects found in review ([#140](https://github.com/gbbirkisson/mcp-oda/issues/140)) ([0d52aa5](https://github.com/gbbirkisson/mcp-oda/commit/0d52aa51b2643394a8a670efc558fdcacbdd1976))
+* **deps:** update dependency @types/node to v26.3.0 ([#141](https://github.com/gbbirkisson/mcp-oda/issues/141)) ([a338be2](https://github.com/gbbirkisson/mcp-oda/commit/a338be205a3ce4c49992e3b79dec99966e2b40a7))
+* **deps:** update dependency typescript-eslint to v8.68.0 ([#142](https://github.com/gbbirkisson/mcp-oda/issues/142)) ([c1b7606](https://github.com/gbbirkisson/mcp-oda/commit/c1b760674caa7d5cd1387af82f95b817b028dbc9))
+* **deps:** update dependency vitest to v4.1.11 ([#139](https://github.com/gbbirkisson/mcp-oda/issues/139)) ([ff1e8e8](https://github.com/gbbirkisson/mcp-oda/commit/ff1e8e8a6737d9b723d0c587c4cc57aa72cf3ed6))
+
 ## [0.5.0](https://github.com/gbbirkisson/mcp-oda/compare/0.4.5...0.5.0) (2026-08-12)
 
 

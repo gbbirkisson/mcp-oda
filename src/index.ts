@@ -43,6 +43,37 @@ program
   });
 
 // --- auth commands (unchanged) ---
+// Read the password from stdin.
+//
+// fs.readFileSync(0) throws EAGAIN when stdin is a non-blocking pipe whose writer
+// has not produced any data yet -- e.g. `op read ... | mcp-oda auth login --pass-stdin`
+// where the secret manager needs a moment to unlock. Retry on EAGAIN instead of
+// failing the login.
+function readPasswordFromStdin(): string {
+  const chunks: Buffer[] = [];
+  const buf = Buffer.alloc(64 * 1024);
+  const idle = new Int32Array(new SharedArrayBuffer(4));
+
+  for (;;) {
+    let read: number;
+    try {
+      read = fs.readSync(0, buf, 0, buf.length, null);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EAGAIN") {
+        Atomics.wait(idle, 0, 0, 20); // sleep 20ms without spinning
+        continue;
+      }
+      if (code === "EOF") break;
+      throw err;
+    }
+    if (read === 0) break;
+    chunks.push(Buffer.from(buf.subarray(0, read)));
+  }
+
+  return Buffer.concat(chunks).toString("utf-8").replace(/\r?\n$/, "");
+}
+
 const authCmd = program.command("auth").description("Authentication commands");
 
 authCmd
@@ -57,7 +88,7 @@ authCmd
   .action(async (cmdOpts) => {
     const opts = program.opts();
     const password = cmdOpts.passStdin
-      ? fs.readFileSync(0, "utf-8").replace(/\r?\n$/, "")
+      ? readPasswordFromStdin()
       : cmdOpts.pass;
     const server = new OdaServer(opts.dataDir);
     await server.auth(cmdOpts.user, password);

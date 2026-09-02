@@ -115,14 +115,18 @@ describe("Oda Integration Tests", () => {
 
       // Verify product is in cart
       const cartAfterAdd = await authClient.getCartContents();
-      expect(cartAfterAdd.some((item) => item.id === productId)).toBe(true);
+      expect(cartAfterAdd.items.some((item) => item.id === productId)).toBe(
+        true,
+      );
 
       // Remove from cart (throws on failure)
       await authClient.removeFromCart(productId);
 
       // Verify product is no longer in cart
       const cartAfterRemove = await authClient.getCartContents();
-      expect(cartAfterRemove.some((item) => item.id === productId)).toBe(false);
+      expect(cartAfterRemove.items.some((item) => item.id === productId)).toBe(
+        false,
+      );
     }, 60000);
 
     it("should clear the cart", async () => {
@@ -134,14 +138,14 @@ describe("Oda Integration Tests", () => {
 
       // Verify cart is non-empty
       const cartBefore = await authClient.getCartContents();
-      expect(cartBefore.length).toBeGreaterThan(0);
+      expect(cartBefore.items.length).toBeGreaterThan(0);
 
       // Clear cart (throws on failure)
       await authClient.clearCart();
 
       // Verify cart is empty
       const cartAfter = await authClient.getCartContents();
-      expect(cartAfter.length).toBe(0);
+      expect(cartAfter.items.length).toBe(0);
     }, 60000);
 
     it("should add and remove a recipe from cart", async () => {
@@ -153,7 +157,7 @@ describe("Oda Integration Tests", () => {
 
       // Verify cart has items from the recipe
       const cartAfterAdd = await authClient.getCartContents();
-      expect(cartAfterAdd.length).toBeGreaterThan(0);
+      expect(cartAfterAdd.items.length).toBeGreaterThan(0);
 
       // Remove recipe from cart
       await authClient.removeRecipeFromCart(recipeId);

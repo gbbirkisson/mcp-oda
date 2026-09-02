@@ -229,6 +229,19 @@ cartCmd
   });
 
 cartCmd
+  .command("set <id>")
+  .description("Set the absolute quantity of a product in the cart")
+  .requiredOption("--count <number>", "Target quantity (0 removes the item)")
+  .action(async (id: string, cmdOpts) => {
+    const client = makeClient();
+    const cart = await client.setCartQuantity(
+      parseInt(id),
+      parseInt(cmdOpts.count),
+    );
+    console.log(JSON.stringify(cart, null, 2));
+  });
+
+cartCmd
   .command("clear")
   .description("Clear the cart")
   .requiredOption("--confirmation <text>", "Must be exactly CLEAR CART")

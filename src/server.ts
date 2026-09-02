@@ -261,8 +261,8 @@ export class OdaServer {
         inputSchema: { id: z.number(), count: z.number().optional() },
       },
       this.toolHandler("cart_remove_item", async ({ id, count }) => {
-        await this.getClient().removeFromCart(id, count);
-        return this.textResult("Item removed");
+        const cart = await this.getClient().removeFromCart(id, count);
+        return this.jsonResult({ status: "removed", cart });
       }),
     );
 
@@ -286,8 +286,8 @@ export class OdaServer {
         inputSchema: { id: z.number(), count: z.number().optional() },
       },
       this.toolHandler("product_add_to_cart", async ({ id, count }) => {
-        await this.getClient().addToCart(id, count);
-        return this.textResult("Product added");
+        const cart = await this.getClient().addToCart(id, count);
+        return this.jsonResult({ status: "added", cart });
       }),
     );
 

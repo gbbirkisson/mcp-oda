@@ -901,16 +901,17 @@ export class OdaClient {
     };
   }
 
-  async addToCart(productId: number, count = 1): Promise<void> {
+  async addToCart(productId: number, count = 1): Promise<Cart> {
     const response = await this.apiPost(OdaClient.CART_ITEMS_API, {
       items: [{ product_id: productId, quantity: count }],
     });
     if (!response.ok) {
       await this.throwApiError("Add to cart", response);
     }
+    return this.parseCartApi(await response.json());
   }
 
-  async removeFromCart(productId: number, count = 1): Promise<void> {
+  async removeFromCart(productId: number, count = 1): Promise<Cart> {
     const response = await this.apiPost(
       OdaClient.CART_ITEMS_API,
       { items: [{ product_id: productId, quantity: -count }] },
@@ -919,6 +920,7 @@ export class OdaClient {
     if (!response.ok) {
       await this.throwApiError("Remove from cart", response);
     }
+    return this.parseCartApi(await response.json());
   }
 
   /**

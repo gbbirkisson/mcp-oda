@@ -1014,3 +1014,45 @@ describe("OdaClient setCartQuantity", () => {
     );
   });
 });
+
+describe("OdaClient cart mutation responses", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const mutationResponse = () =>
+    apiResponse(
+      200,
+      vi.fn().mockResolvedValue({
+        label_text: "1 vare",
+        product_quantity_count: 1,
+        display_price: "31.90",
+        total_gross_amount: "31.90",
+        items: [
+          {
+            item_id: 9,
+            quantity: 1,
+            display_price_total: "31.90",
+            product: { id: 42, full_name: "Tine Lettmelk", gross_price: "31.90" },
+          },
+        ],
+      }),
+    );
+
+  it("addToCart returns the resulting cart", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mutationResponse()));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.addToCart(42);
+    expect(cart.display_price).toBe(31.9);
+    expect(cart.items[0].id).toBe(42);
+  });
+
+  it("removeFromCart returns the resulting cart", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mutationResponse()));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.removeFromCart(42);
+    expect(cart.product_quantity_count).toBe(1);
+  });
+});

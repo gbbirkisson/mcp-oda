@@ -105,8 +105,8 @@ productCmd
   .option("--count <number>", "Quantity to add", "1")
   .action(async (id: string, cmdOpts) => {
     const client = makeClient();
-    await client.addToCart(parseInt(id), parseInt(cmdOpts.count));
-    console.log("Product added to cart.");
+    const cart = await client.addToCart(parseInt(id), parseInt(cmdOpts.count));
+    console.log(JSON.stringify(cartSummary(cart), null, 2));
   });
 
 // --- saved-list commands ---
@@ -206,6 +206,19 @@ purchasesCmd
     );
   });
 
+/** Compact cart state printed after a mutation. */
+function cartSummary(cart: {
+  label_text: string;
+  product_quantity_count: number;
+  display_price: number;
+}) {
+  return {
+    label_text: cart.label_text,
+    product_quantity_count: cart.product_quantity_count,
+    display_price: cart.display_price,
+  };
+}
+
 // --- cart commands ---
 const cartCmd = program.command("cart").description("Cart commands");
 
@@ -224,8 +237,11 @@ cartCmd
   .option("--count <number>", "Quantity to remove", "1")
   .action(async (id: string, cmdOpts) => {
     const client = makeClient();
-    await client.removeFromCart(parseInt(id), parseInt(cmdOpts.count));
-    console.log("Product removed from cart.");
+    const cart = await client.removeFromCart(
+      parseInt(id),
+      parseInt(cmdOpts.count),
+    );
+    console.log(JSON.stringify(cartSummary(cart), null, 2));
   });
 
 cartCmd

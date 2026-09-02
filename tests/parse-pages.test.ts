@@ -41,7 +41,51 @@ describe("parseProductPage", () => {
       id: 8143,
       name: "Tine Lettmelk 1% fett",
       price: 31.9,
+      brand: "TINE",
+      currency: "NOK",
+      is_available: true,
     });
+    expect(page.items[0].image_url).toMatch(/^https:\/\/images\.oda\.com\//);
+    expect(page.total_count).toBe(562);
+    expect(page.type_counts).toMatchObject({ product: 562, recipe: 308 });
+    expect(page.filters?.length).toBeGreaterThan(0);
+  });
+
+  it("parses discount and unavailability details", () => {
+    const page = parseProductPage(
+      URL,
+      hydrated("mixedSearch", {
+        items: [
+          {
+            type: "product",
+            attributes: {
+              id: 1,
+              fullName: "Tilbudsvare",
+              grossPrice: "10.00",
+              availability: { isAvailable: false, code: "sold_out" },
+              discount: {
+                isDiscounted: true,
+                undiscountedGrossPrice: "20.00",
+                descriptionShort: "Salg!",
+                maximumQuantity: 3,
+              },
+            },
+          },
+        ],
+        attributes: {},
+      }),
+    );
+
+    expect(page.items[0]).toMatchObject({
+      is_available: false,
+      availability_code: "sold_out",
+      discount: {
+        undiscounted_price: 20,
+        description: "Salg!",
+        maximum_quantity: 3,
+      },
+    });
+    expect(page.total_count).toBeUndefined();
   });
 
   it("throws when the page has no hydration data", () => {

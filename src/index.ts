@@ -342,7 +342,7 @@ program
 // --- dump command (unchanged) ---
 program
   .command("dump <url>")
-  .description("Fetch a URL and print its hydration data")
+  .description("Fetch a URL and print its hydration data or JSON body")
   .action(async (url: string) => {
     const client = makeClient();
 
@@ -365,12 +365,17 @@ program
           : "(none found)",
       );
 
-      console.log(`\n=== Hydration data ===`);
-      console.log(
-        result.nextData
-          ? JSON.stringify(result.nextData, null, 2)
-          : "(not found)",
-      );
+      if (result.jsonBody !== null) {
+        console.log(`\n=== JSON body ===`);
+        console.log(JSON.stringify(result.jsonBody, null, 2));
+      } else {
+        console.log(`\n=== Hydration data ===`);
+        console.log(
+          result.nextData
+            ? JSON.stringify(result.nextData, null, 2)
+            : "(not found)",
+        );
+      }
     } catch (e) {
       console.error("Dump failed:", e);
       process.exit(1);

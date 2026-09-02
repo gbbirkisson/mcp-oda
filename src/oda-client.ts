@@ -498,25 +498,39 @@ export class OdaClient {
 
   async dump(url: string): Promise<{
     nextData: any | null;
+    jsonBody: any | null;
     queryKeys: string[];
     headers: Record<string, string>;
     status: number;
     finalUrl: string;
   }> {
     const response = await this.getFollowRedirects(url);
-    const html = await response.text();
+    const body = await response.text();
 
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
 
-    const nextData = extractNextData(html);
+    // JSON API endpoints have no hydration payload - surface the raw body
+    // instead so dump works for API discovery too.
+    let jsonBody: any | null = null;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        jsonBody = JSON.parse(body);
+      } catch {
+        // fall through with jsonBody = null
+      }
+    }
+
+    const nextData = jsonBody === null ? extractNextData(body) : null;
     const queries: any[] =
       nextData?.props?.pageProps?.dehydratedState?.queries ?? [];
 
     return {
       nextData,
+      jsonBody,
       queryKeys: queries.map((q) => describeQueryKey(q.queryKey)),
       headers: responseHeaders,
       status: response.status,

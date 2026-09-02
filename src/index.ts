@@ -377,9 +377,27 @@ program
     }
   });
 
-program.parse();
-
 process.on("unhandledRejection", (err) => {
   console.error(err);
+  process.exit(1);
+});
+
+// Some Oda pages (recipe pages, notably) leave a referenced keep-alive
+// socket behind after the response body is fully consumed, so the event
+// loop never drains and the process hangs after the command has finished.
+// Exit explicitly once the command action resolves - except for the MCP
+// server, which must keep running on stdio.
+async function main() {
+  await program.parseAsync();
+  if (program.args[0] === "mcp") return;
+  // Let queued stdout writes drain before exiting.
+  await new Promise<void>((resolve) => {
+    process.stdout.write("", () => resolve());
+  });
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

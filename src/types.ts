@@ -83,3 +83,31 @@ export type CartRecommendation = ProductSummary;
 export interface SavedListDetail extends SavedList {
   items: SavedListItem[];
 }
+
+export interface DeliverySlot {
+  id: number;
+  starts_at: string;
+  ends_at: string;
+  /** Ordering deadline for this slot. */
+  deadline: string;
+  /** Numeric price parsed from the display string, when parseable. */
+  price: number | null;
+  price_label: string;
+  is_available: boolean;
+  is_cheapest?: boolean;
+  /** Why the slot is unavailable, when Oda says so (often cart-dependent). */
+  unavailable_description?: string;
+}
+
+export interface DeliveryDay {
+  /** Local calendar date (YYYY-MM-DD) in the store's time zone. */
+  date: string;
+  slots: DeliverySlot[];
+}
+
+export interface DeliverySlots {
+  time_zone: string;
+  days: DeliveryDay[];
+  /** Cart-dependent warnings, e.g. items not purchasable before a date. */
+  validation_messages: string[];
+}

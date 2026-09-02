@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.1](https://github.com/gbbirkisson/mcp-oda/compare/1.0.0...1.0.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @types/node to v26.4.0 ([#144](https://github.com/gbbirkisson/mcp-oda/issues/144)) ([2658812](https://github.com/gbbirkisson/mcp-oda/commit/26588128233a90e296e193dcefcd293e291e3a7d))
+* **deps:** update dependency @types/node to v26.4.1 ([#150](https://github.com/gbbirkisson/mcp-oda/issues/150)) ([f84a158](https://github.com/gbbirkisson/mcp-oda/commit/f84a1581891f5b7e9f4c062bbd7d88d7e3d952b7))
+* **deps:** update dependency tsx to v4.23.13 ([#148](https://github.com/gbbirkisson/mcp-oda/issues/148)) ([3fb0aac](https://github.com/gbbirkisson/mcp-oda/commit/3fb0aac553b5994d73286aae370b6bfe443df6a5))
+* **deps:** update dependency typescript-eslint to v8.69.0 ([#149](https://github.com/gbbirkisson/mcp-oda/issues/149)) ([e39bea8](https://github.com/gbbirkisson/mcp-oda/commit/e39bea812c1422336dc0e1d2230ab75ec76c425c))
+* **deps:** update dependency zod to v4.5.2 ([#146](https://github.com/gbbirkisson/mcp-oda/issues/146)) ([40756bc](https://github.com/gbbirkisson/mcp-oda/commit/40756bcc6be79e2b8d82fcc1b724af9dda6c52f6))
+* **deps:** update dependency zod to v4.5.4 ([#147](https://github.com/gbbirkisson/mcp-oda/issues/147)) ([d5c74b9](https://github.com/gbbirkisson/mcp-oda/commit/d5c74b9c7dac094864d5941fe2701e6234dbe15a))
+
 ## [1.0.0](https://github.com/gbbirkisson/mcp-oda/compare/0.5.0...1.0.0) (2026-08-26)
 
 

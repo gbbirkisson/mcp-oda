@@ -5,12 +5,31 @@ export interface SearchResult {
   price: number;
   relative_price: number;
   relative_price_unit: string;
+  brand?: string;
+  currency?: string;
+  is_available?: boolean;
+  /** Only set when the product is not plainly available. */
+  availability_code?: string;
+  discount?: {
+    undiscounted_price: number;
+    description?: string;
+    /** Max units at the discounted price, when the campaign caps it. */
+    maximum_quantity?: number;
+  };
+  image_url?: string;
 }
+
+export type SearchFilter = RecipeFilter;
 
 export interface ProductPage {
   page_url: string;
   items: SearchResult[];
   has_more: boolean;
+  /** Total matching products across all pages. */
+  total_count?: number;
+  /** Matches per content type (product, recipe, ...). */
+  type_counts?: Record<string, number>;
+  filters?: SearchFilter[];
 }
 
 export interface CartItem {

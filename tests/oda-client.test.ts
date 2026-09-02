@@ -755,3 +755,304 @@ describe("OdaClient frequent products request volume", () => {
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 });
+
+describe("OdaClient cart fetch errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects with an auth hint when fetching the cart fails with 401", async () => {
+    const json = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(apiResponse(401, json, "not authenticated")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.getCartContents()).rejects.toThrow(
+      /Get cart failed: HTTP 401 \(authentication may be required or expired\).*not authenticated/,
+    );
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the cart response is not parseable JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        apiResponse(
+          200,
+          vi.fn().mockRejectedValue(new SyntaxError("Unexpected token <")),
+        ),
+      ),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.getCartContents()).rejects.toThrow(
+      /Get cart failed: unparseable response/,
+    );
+  });
+
+  it("returns the parsed items for a successful cart response", async () => {
+    const cart = {
+      items: [
+        {
+          quantity: 2,
+          product: {
+            id: 42,
+            full_name: "Tine Lettmelk",
+            name_extra: "1,75 l",
+            gross_price: "31.90",
+            gross_unit_price: "18.23",
+            unit_price_quantity_abbreviation: "l",
+          },
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(apiResponse(200, vi.fn().mockResolvedValue(cart))),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const result = await client.getCartContents();
+    expect(result.items).toEqual([
+      {
+        id: 42,
+        name: "Tine Lettmelk",
+        subtitle: "1,75 l",
+        quantity: 2,
+        price: 31.9,
+        relative_price: 18.23,
+        relative_price_unit: "/l",
+        item_id: 0,
+        line_total: 63.8,
+      },
+    ]);
+  });
+});
+
+describe("OdaClient cart totals and grouping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps cart totals and annotates group membership per line", async () => {
+    // Mirrors the documented GET /api/v1/cart/ response (ODA_API.md)
+    const cartResponse = {
+      id: 0,
+      label_text: "3 varer",
+      product_quantity_count: 3,
+      display_price: "1068.40",
+      total_gross_amount: "1116.29",
+      items: [
+        {
+          item_id: 111,
+          quantity: 2,
+          display_price_total: "63.80",
+          product: {
+            id: 42,
+            full_name: "Tine Lettmelk",
+            name_extra: "1,75 l",
+            gross_price: "31.90",
+            gross_unit_price: "18.23",
+            unit_price_quantity_abbreviation: "l",
+          },
+        },
+      ],
+      groups: [
+        {
+          id: "recipe-1",
+          title: "Pizza Margherita",
+          group_type: "recipe",
+          items: [
+            {
+              item_id: 222,
+              quantity: 1,
+              display_price_total: "29.90",
+              product: {
+                id: 9452,
+                full_name: "Avokado modnet Chile / Spania/ Marokko",
+                name: "Avokado modnet",
+                name_extra: "Chile / Spania/ Marokko, 2 stk",
+                gross_price: "29.90",
+                gross_unit_price: "14.95",
+                unit_price_quantity_abbreviation: "stk",
+              },
+            },
+          ],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          apiResponse(200, vi.fn().mockResolvedValue(cartResponse)),
+        ),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.getCartContents();
+    expect(cart.label_text).toBe("3 varer");
+    expect(cart.product_quantity_count).toBe(3);
+    expect(cart.display_price).toBe(1068.4);
+    expect(cart.total_gross_amount).toBe(1116.29);
+    expect(cart.items).toHaveLength(2);
+
+    const [milk, avocado] = cart.items;
+    expect(milk.item_id).toBe(111);
+    expect(milk.line_total).toBe(63.8);
+    expect(milk.group_title).toBeUndefined();
+
+    expect(avocado.id).toBe(9452);
+    expect(avocado.item_id).toBe(222);
+    expect(avocado.line_total).toBe(29.9);
+    expect(avocado.group_title).toBe("Pizza Margherita");
+    expect(avocado.group_type).toBe("recipe");
+  });
+});
+
+describe("OdaClient setCartQuantity", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const cartWith = (quantity: number) => ({
+    label_text: `${quantity} varer`,
+    product_quantity_count: quantity,
+    display_price: "10.00",
+    total_gross_amount: "10.00",
+    items:
+      quantity > 0
+        ? [
+            {
+              item_id: 1,
+              quantity,
+              display_price_total: "10.00",
+              product: { id: 7, full_name: "Vare", gross_price: "5.00" },
+            },
+          ]
+        : [],
+  });
+
+  it("posts the delta needed to reach the target quantity", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(2))),
+      )
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(5))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.setCartQuantity(7, 5);
+    expect(cart.product_quantity_count).toBe(5);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toEqual({ items: [{ product_id: 7, quantity: 3 }] });
+  });
+
+  it("posts a negative delta down to zero", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(2))),
+      )
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(0))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await client.setCartQuantity(7, 0);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toEqual({ items: [{ product_id: 7, quantity: -2 }] });
+  });
+
+  it("does not post when the cart already matches", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(2))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.setCartQuantity(7, 2);
+    expect(cart.product_quantity_count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds the full quantity for a product not in the cart", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(0))),
+      )
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(3))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await client.setCartQuantity(7, 3);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toEqual({ items: [{ product_id: 7, quantity: 3 }] });
+  });
+
+  it("rejects non-integer and negative quantities", async () => {
+    const client = new OdaClient("/nonexistent/cookies.json");
+    await expect(client.setCartQuantity(7, 1.5)).rejects.toThrow(
+      /non-negative integer/,
+    );
+    await expect(client.setCartQuantity(7, -1)).rejects.toThrow(
+      /non-negative integer/,
+    );
+  });
+});
+
+describe("OdaClient cart mutation responses", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const mutationResponse = () =>
+    apiResponse(
+      200,
+      vi.fn().mockResolvedValue({
+        label_text: "1 vare",
+        product_quantity_count: 1,
+        display_price: "31.90",
+        total_gross_amount: "31.90",
+        items: [
+          {
+            item_id: 9,
+            quantity: 1,
+            display_price_total: "31.90",
+            product: { id: 42, full_name: "Tine Lettmelk", gross_price: "31.90" },
+          },
+        ],
+      }),
+    );
+
+  it("addToCart returns the resulting cart", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mutationResponse()));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.addToCart(42);
+    expect(cart.display_price).toBe(31.9);
+    expect(cart.items[0].id).toBe(42);
+  });
+
+  it("removeFromCart returns the resulting cart", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mutationResponse()));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.removeFromCart(42);
+    expect(cart.product_quantity_count).toBe(1);
+  });
+});

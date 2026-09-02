@@ -80,7 +80,8 @@ export class OdaServer {
     this.mcpServer.registerTool(
       "cart_get_contents",
       {
-        description: "Get the current shopping cart contents.",
+        description:
+          "Get the current shopping cart: totals (display_price, item count) and items, with recipe grouping annotated per line.",
       },
       this.toolHandler("cart_get_contents", async () => {
         return this.jsonResult(await this.getClient().getCartContents());
@@ -218,6 +219,23 @@ export class OdaServer {
     );
 
     this.mcpServer.registerTool(
+      "cart_set_quantity",
+      {
+        description:
+          "Set the ABSOLUTE quantity of a product in the cart (unlike add/remove, which apply relative deltas). Quantity 0 removes the item. Returns the resulting cart.",
+        inputSchema: {
+          id: z.number().int().positive(),
+          quantity: z.number().int().min(0),
+        },
+      },
+      this.toolHandler("cart_set_quantity", async ({ id, quantity }) => {
+        return this.jsonResult(
+          await this.getClient().setCartQuantity(id, quantity),
+        );
+      }),
+    );
+
+    this.mcpServer.registerTool(
       "cart_clear",
       {
         description:
@@ -243,8 +261,8 @@ export class OdaServer {
         inputSchema: { id: z.number(), count: z.number().optional() },
       },
       this.toolHandler("cart_remove_item", async ({ id, count }) => {
-        await this.getClient().removeFromCart(id, count);
-        return this.textResult("Item removed");
+        const cart = await this.getClient().removeFromCart(id, count);
+        return this.jsonResult({ status: "removed", cart });
       }),
     );
 
@@ -268,8 +286,8 @@ export class OdaServer {
         inputSchema: { id: z.number(), count: z.number().optional() },
       },
       this.toolHandler("product_add_to_cart", async ({ id, count }) => {
-        await this.getClient().addToCart(id, count);
-        return this.textResult("Product added");
+        const cart = await this.getClient().addToCart(id, count);
+        return this.jsonResult({ status: "added", cart });
       }),
     );
 

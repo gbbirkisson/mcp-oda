@@ -80,7 +80,8 @@ export class OdaServer {
     this.mcpServer.registerTool(
       "cart_get_contents",
       {
-        description: "Get the current shopping cart contents.",
+        description:
+          "Get the current shopping cart: totals (display_price, item count) and items, with recipe grouping annotated per line.",
       },
       this.toolHandler("cart_get_contents", async () => {
         return this.jsonResult(await this.getClient().getCartContents());
@@ -112,10 +113,22 @@ export class OdaServer {
       {
         description:
           "Read Oda's current cart recommendations as a normalized product list. Read-only; recommendations may be empty when the cart is empty.",
+        inputSchema: {
+          limit: z.number().int().min(1).max(50).optional(),
+          exclude_in_cart: z.boolean().optional(),
+        },
       },
-      this.toolHandler("cart_get_recommendations", async () => {
-        return this.jsonResult(await this.getClient().getCartRecommendations());
-      }),
+      this.toolHandler(
+        "cart_get_recommendations",
+        async ({ limit, exclude_in_cart }) => {
+          return this.jsonResult(
+            await this.getClient().getCartRecommendations({
+              limit,
+              excludeInCart: exclude_in_cart,
+            }),
+          );
+        },
+      ),
     );
 
     this.mcpServer.registerTool(

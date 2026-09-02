@@ -1,7 +1,8 @@
 import {
   SearchResult,
   ProductPage,
-  CartItem,
+  Cart,
+  CartLine,
   Recipe,
   RecipeFilter,
   RecipePage,
@@ -640,14 +641,27 @@ export class OdaClient {
       .slice(0, limit);
   }
 
-  async getCartRecommendations(): Promise<CartRecommendation[]> {
+  async getCartRecommendations(options?: {
+    limit?: number;
+    excludeInCart?: boolean;
+  }): Promise<CartRecommendation[]> {
     const response = await this.apiGet(
       `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
     );
     if (!response.ok) {
       await this.throwApiError("Get cart recommendations", response);
     }
-    return OdaClient.collectRecommendedProducts(await response.json());
+    let recommendations = OdaClient.collectRecommendedProducts(
+      await response.json(),
+      options?.limit,
+    );
+    if (options?.excludeInCart) {
+      // Oda recommends items already in the cart; those are rarely useful.
+      const cart = await this.getCartContents();
+      const inCart = new Set(cart.items.map((item) => item.id));
+      recommendations = recommendations.filter((r) => !inCart.has(r.id));
+    }
+    return recommendations;
   }
 
   /**
@@ -831,35 +845,41 @@ export class OdaClient {
     }
   }
 
-  async getCartContents(): Promise<CartItem[]> {
+  async getCartContents(): Promise<Cart> {
     // Cart data is not in __NEXT_DATA__, use the REST API directly
     const response = await this.apiGet(OdaClient.CART_API);
     if (response.status === 425) {
       throw new Error("Server returned 425 Too Early. Please try again later.");
     }
     if (!response.ok) {
-      return [];
+      // An expired session must not look like an empty cart
+      await this.throwApiError("Get cart", response);
     }
 
+    let data: any;
     try {
-      const data = await response.json();
-      return this.parseCartApi(data);
+      data = await response.json();
     } catch (e) {
-      console.error("Failed to parse cart API response", e);
-      return [];
+      throw new Error(`Get cart failed: unparseable response (${e})`);
     }
+    return this.parseCartApi(data);
   }
 
-  private parseCartApi(data: any): CartItem[] {
-    const items: CartItem[] = [];
+  private parseCartApi(data: any): Cart {
+    const items: CartLine[] = [];
 
-    // Items can be at top-level or nested under groups
-    const rawItems: any[] = data.items || [];
+    // Items can be at top-level or nested under groups (e.g. recipes). The
+    // list stays flat; group membership is annotated per line instead.
+    const rawItems: Array<{ item: any; group?: any }> = (data.items || []).map(
+      (item: any) => ({ item }),
+    );
     for (const group of data.groups || []) {
-      rawItems.push(...(group.items || []));
+      for (const item of group.items || []) {
+        rawItems.push({ item, group });
+      }
     }
 
-    for (const item of rawItems) {
+    for (const { item, group } of rawItems) {
       const product = item.product || {};
       const productId = product.id;
       const name = product.full_name || product.name || "Unknown Product";
@@ -869,7 +889,7 @@ export class OdaClient {
       const unitPrice = parseFloat(product.gross_unit_price) || 0;
       const unitPriceUnit = product.unit_price_quantity_abbreviation || "";
 
-      items.push({
+      const line: CartLine = {
         id: productId,
         name,
         subtitle,
@@ -877,10 +897,21 @@ export class OdaClient {
         price,
         relative_price: unitPrice,
         relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
-      });
+        item_id: item.item_id || 0,
+        line_total: parseFloat(item.display_price_total) || price * quantity,
+      };
+      if (group?.title) line.group_title = group.title;
+      if (group?.group_type) line.group_type = group.group_type;
+      items.push(line);
     }
 
-    return items;
+    return {
+      label_text: data.label_text || "",
+      product_quantity_count: data.product_quantity_count || 0,
+      display_price: parseFloat(data.display_price) || 0,
+      total_gross_amount: parseFloat(data.total_gross_amount) || 0,
+      items,
+    };
   }
 
   async addToCart(productId: number, count = 1): Promise<void> {

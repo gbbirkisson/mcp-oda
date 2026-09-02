@@ -334,14 +334,24 @@ export class OdaClient {
 
   private updateCookies(response: Response) {
     const setCookies = response.headers.getSetCookie();
+    let changed = false;
     for (const header of setCookies) {
       const parts = header.split(";")[0];
       const eq = parts.indexOf("=");
       if (eq > 0) {
         const name = parts.substring(0, eq).trim();
         const value = parts.substring(eq + 1).trim();
-        this.cookies[name] = value;
+        if (this.cookies[name] !== value) {
+          this.cookies[name] = value;
+          changed = true;
+        }
       }
+    }
+    // Persist refreshed session cookies so they outlive this process, but
+    // only into an existing cookie file - an anonymous client (no login,
+    // no file) should never leave a cookie file behind.
+    if (changed && fs.existsSync(this.cookiePath)) {
+      this.saveCookies();
     }
   }
 

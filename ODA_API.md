@@ -515,6 +515,86 @@ Note its `queryKey` is a plain string array (`["user"]`), not the
 }
 ```
 
+## Delivery Slots
+
+**GET** `https://oda.com/api/v1/slot-picker/slots/`
+
+Requires an authenticated session. Read-only view of the delivery slot picker,
+including per-slot ordering deadlines and validation against the current cart.
+
+**Response** (snake_case, trimmed):
+```json
+{
+  "time_zone": "Europe/Oslo",
+  "from_index": 0,
+  "has_earlier": false,
+  "has_later": true,
+  "has_cheapest": true,
+  "unattended_available": true,
+  "delivery_slots": [
+    {
+      "id": 1646967,
+      "route_group": 1,
+      "route_group_str": "Morning",
+      "open_datetime": "2026-09-04T03:00:00Z",
+      "close_datetime": "2026-09-04T05:00:00Z",
+      "cutoff_time": "2026-09-03T18:00:00Z",
+      "price": "kr 79",
+      "is_selected": false,
+      "is_full": false,
+      "is_unavailable": false,
+      "is_cheapest": false,
+      "unavailable_description": "",
+      "has_discount_neighbor": false,
+      "has_discount_delivery_coupon": false,
+      "tag": null,
+      "validation_messages": []
+    }
+  ],
+  "cart_info": {
+    "delivery_slot": null,
+    "delivery_address": { "id": 0, "address_display_full": "..." }
+  },
+  "delivery_addresses": [],
+  "validation_messages": [
+    {
+      "type": "product_availability_date",
+      "description": "Noen av varene i handlekurven ... er ikke tilgjengelige før ..."
+    }
+  ]
+}
+```
+
+Notes:
+
+- `cutoff_time` is the ordering deadline for the slot.
+- `price` is a display string (`"kr 79"`, with a non-breaking space), not a
+  number.
+- `is_unavailable` + `unavailable_description` reflect the **current cart**:
+  a slot can be unavailable because a cart item is not purchasable until a
+  later date. Top-level `validation_messages` carries the same warnings.
+- `from_index` / `has_earlier` / `has_later` suggest windowed paging, but the
+  first request already returned 58 slots spanning two weeks.
+
+## Mixed Search API (unused)
+
+**GET** `https://oda.com/api/v1/search/mixed/?q=<query>&type=suggestion`
+
+Works unauthenticated and returns **search suggestions**, not search results:
+a `query_list` container (e.g. `trending_queries_list`) with query strings.
+Field names are snake_case here (`has_more_items`, `request_types`), unlike
+the camelCase hydration payload the HTML search pages carry.
+
+Full search results via this API (other `type` values) are undocumented; the
+CLI deliberately keeps parsing the HTML search pages, which carry complete
+product attributes and filters.
+
+## Saved List Pagination
+
+`GET /api/v1/product-lists/?filter=product_lists` is a standard DRF-paginated
+response: `{"next": <url|null>, "previous": <url|null>, "results": [...]}` -
+followers must walk `next` to see every list.
+
 ## Important Notes
 
 - Search and recipe data use **camelCase** field names (from React/Next.js)

@@ -914,3 +914,74 @@ describe("OdaClient cart totals and grouping", () => {
     expect(avocado.group_type).toBe("recipe");
   });
 });
+
+describe("OdaClient cart recommendation options", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const recommendationPayload = {
+    groups: [
+      {
+        items: [
+          { id: 1, full_name: "Vare A", gross_price: "10.00" },
+          { id: 2, full_name: "Vare B", gross_price: "20.00" },
+          { id: 3, full_name: "Vare C", gross_price: "30.00" },
+        ],
+      },
+    ],
+  };
+
+  it("respects the limit while walking the payload", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          apiResponse(
+            200,
+            vi.fn().mockResolvedValue(recommendationPayload),
+          ),
+        ),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const recs = await client.getCartRecommendations({ limit: 2 });
+    expect(recs).toHaveLength(2);
+  });
+
+  it("filters out products already in the cart", async () => {
+    const cartResponse = {
+      label_text: "1 vare",
+      product_quantity_count: 1,
+      display_price: "10.00",
+      total_gross_amount: "10.00",
+      items: [
+        {
+          item_id: 5,
+          quantity: 1,
+          display_price_total: "10.00",
+          product: { id: 2, full_name: "Vare B", gross_price: "20.00" },
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          apiResponse(
+            200,
+            vi.fn().mockResolvedValue(recommendationPayload),
+          ),
+        )
+        .mockResolvedValueOnce(
+          apiResponse(200, vi.fn().mockResolvedValue(cartResponse)),
+        ),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const recs = await client.getCartRecommendations({ excludeInCart: true });
+    expect(recs.map((r) => r.id)).toEqual([1, 3]);
+  });
+});

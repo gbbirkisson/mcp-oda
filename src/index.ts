@@ -244,9 +244,15 @@ cartCmd
 cartCmd
   .command("recommendations")
   .description("Show Oda's current cart recommendations")
-  .action(async () => {
+  .option("--limit <number>", "Maximum number of recommendations", "20")
+  .option("--exclude-in-cart", "Hide products already in the cart")
+  .action(async (cmdOpts) => {
     const client = makeClient();
-    console.log(JSON.stringify(await client.getCartRecommendations(), null, 2));
+    const recommendations = await client.getCartRecommendations({
+      limit: parseInt(cmdOpts.limit),
+      excludeInCart: cmdOpts.excludeInCart === true,
+    });
+    console.log(JSON.stringify(recommendations, null, 2));
   });
 
 // --- recipe commands ---

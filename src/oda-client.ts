@@ -641,14 +641,27 @@ export class OdaClient {
       .slice(0, limit);
   }
 
-  async getCartRecommendations(): Promise<CartRecommendation[]> {
+  async getCartRecommendations(options?: {
+    limit?: number;
+    excludeInCart?: boolean;
+  }): Promise<CartRecommendation[]> {
     const response = await this.apiGet(
       `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
     );
     if (!response.ok) {
       await this.throwApiError("Get cart recommendations", response);
     }
-    return OdaClient.collectRecommendedProducts(await response.json());
+    let recommendations = OdaClient.collectRecommendedProducts(
+      await response.json(),
+      options?.limit,
+    );
+    if (options?.excludeInCart) {
+      // Oda recommends items already in the cart; those are rarely useful.
+      const cart = await this.getCartContents();
+      const inCart = new Set(cart.items.map((item) => item.id));
+      recommendations = recommendations.filter((r) => !inCart.has(r.id));
+    }
+    return recommendations;
   }
 
   /**

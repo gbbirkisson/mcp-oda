@@ -339,6 +339,19 @@ program
     }
   });
 
+// --- delivery commands ---
+const deliveryCmd = program
+  .command("delivery")
+  .description("Delivery information (read-only)");
+
+deliveryCmd
+  .command("slots")
+  .description("List upcoming delivery slots with ordering deadlines")
+  .action(async () => {
+    const client = makeClient();
+    console.log(JSON.stringify(await client.getDeliverySlots(), null, 2));
+  });
+
 // --- dump command (unchanged) ---
 program
   .command("dump <url>")

@@ -249,6 +249,17 @@ export class OdaServer {
     );
 
     this.mcpServer.registerTool(
+      "delivery_get_slots",
+      {
+        description:
+          "List upcoming delivery slots grouped by day, with per-slot ordering deadlines and prices. Read-only: no slot can be selected and no order can be placed through this server.",
+      },
+      this.toolHandler("delivery_get_slots", async () => {
+        return this.jsonResult(await this.getClient().getDeliverySlots());
+      }),
+    );
+
+    this.mcpServer.registerTool(
       "products_search",
       {
         description: "Search for products on Oda.",

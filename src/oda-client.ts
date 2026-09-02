@@ -748,14 +748,29 @@ export class OdaClient {
   }
 
   async getSavedLists(): Promise<SavedList[]> {
-    const response = await this.apiGet(
-      `${OdaClient.API_BASE}/api/v1/product-lists/?filter=product_lists`,
-    );
-    if (!response.ok) {
-      await this.throwApiError("Get saved lists", response);
+    // DRF-paginated: follow `next` so accounts with many lists are not
+    // silently truncated. Guard against pagination loops like the order
+    // walk in getFrequentProducts does.
+    const lists: SavedList[] = [];
+    const visitedPages = new Set<string>();
+    let url: string | null =
+      `${OdaClient.API_BASE}/api/v1/product-lists/?filter=product_lists`;
+
+    while (url && !visitedPages.has(url)) {
+      visitedPages.add(url);
+      const response = await this.apiGet(url);
+      if (!response.ok) {
+        await this.throwApiError("Get saved lists", response);
+      }
+      const data = (await response.json()) as any;
+      for (const list of data.results || []) {
+        lists.push(this.parseSavedList(list));
+      }
+      url = data.next
+        ? OdaClient.resolveOdaUrl(String(data.next), "saved list pagination URL")
+        : null;
     }
-    const data = (await response.json()) as any;
-    return (data.results || []).map((list: any) => this.parseSavedList(list));
+    return lists;
   }
 
   async getSavedListDetails(listId: number): Promise<SavedListDetail> {

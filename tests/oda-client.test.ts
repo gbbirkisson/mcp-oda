@@ -755,3 +755,53 @@ describe("OdaClient frequent products request volume", () => {
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 });
+
+describe("OdaClient saved list pagination", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const listPage = (ids: number[], next: string | null) =>
+    apiResponse(
+      200,
+      vi.fn().mockResolvedValue({
+        next,
+        previous: null,
+        results: ids.map((id) => ({
+          id,
+          title: `Liste ${id}`,
+          description: "",
+          number_of_products: 1,
+          number_of_items: 1,
+          total_quantity: 1,
+          url: `/no/lists/${id}/`,
+        })),
+      }),
+    );
+
+  it("follows next links across pages", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        listPage([1, 2], "https://oda.com/api/v1/product-lists/?page=2"),
+      )
+      .mockResolvedValueOnce(listPage([3], null));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const lists = await client.getSavedLists();
+    expect(lists.map((l) => l.id)).toEqual([1, 2, 3]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops on a pagination loop", async () => {
+    const url = "https://oda.com/api/v1/product-lists/?filter=product_lists";
+    const fetchMock = vi.fn().mockResolvedValue(listPage([1], url));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const lists = await client.getSavedLists();
+    expect(lists.map((l) => l.id)).toEqual([1]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

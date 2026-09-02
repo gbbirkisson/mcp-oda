@@ -914,3 +914,103 @@ describe("OdaClient cart totals and grouping", () => {
     expect(avocado.group_type).toBe("recipe");
   });
 });
+
+describe("OdaClient setCartQuantity", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const cartWith = (quantity: number) => ({
+    label_text: `${quantity} varer`,
+    product_quantity_count: quantity,
+    display_price: "10.00",
+    total_gross_amount: "10.00",
+    items:
+      quantity > 0
+        ? [
+            {
+              item_id: 1,
+              quantity,
+              display_price_total: "10.00",
+              product: { id: 7, full_name: "Vare", gross_price: "5.00" },
+            },
+          ]
+        : [],
+  });
+
+  it("posts the delta needed to reach the target quantity", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(2))),
+      )
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(5))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.setCartQuantity(7, 5);
+    expect(cart.product_quantity_count).toBe(5);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toEqual({ items: [{ product_id: 7, quantity: 3 }] });
+  });
+
+  it("posts a negative delta down to zero", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(2))),
+      )
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(0))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await client.setCartQuantity(7, 0);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toEqual({ items: [{ product_id: 7, quantity: -2 }] });
+  });
+
+  it("does not post when the cart already matches", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(2))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.setCartQuantity(7, 2);
+    expect(cart.product_quantity_count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds the full quantity for a product not in the cart", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(0))),
+      )
+      .mockResolvedValueOnce(
+        apiResponse(200, vi.fn().mockResolvedValue(cartWith(3))),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await client.setCartQuantity(7, 3);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body).toEqual({ items: [{ product_id: 7, quantity: 3 }] });
+  });
+
+  it("rejects non-integer and negative quantities", async () => {
+    const client = new OdaClient("/nonexistent/cookies.json");
+    await expect(client.setCartQuantity(7, 1.5)).rejects.toThrow(
+      /non-negative integer/,
+    );
+    await expect(client.setCartQuantity(7, -1)).rejects.toThrow(
+      /non-negative integer/,
+    );
+  });
+});

@@ -921,6 +921,35 @@ export class OdaClient {
     }
   }
 
+  /**
+   * Set the absolute quantity of a product in the cart. The cart API only
+   * takes relative deltas, so this reads the cart, computes the difference
+   * and posts it. Read-modify-write: a concurrent cart change between the
+   * read and the post can make the final quantity differ from `quantity`.
+   */
+  async setCartQuantity(productId: number, quantity: number): Promise<Cart> {
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      throw new Error(`Quantity must be a non-negative integer: ${quantity}`);
+    }
+    const cart = await this.getCartContents();
+    const current = cart.items
+      .filter((item) => item.id === productId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    const delta = quantity - current;
+    if (delta === 0) {
+      return cart;
+    }
+    const response = await this.apiPost(
+      OdaClient.CART_ITEMS_API,
+      { items: [{ product_id: productId, quantity: delta }] },
+      `${OdaClient.BASE_URL}/cart/`,
+    );
+    if (!response.ok) {
+      await this.throwApiError("Set cart quantity", response);
+    }
+    return this.parseCartApi(await response.json());
+  }
+
   async clearCart(): Promise<void> {
     const response = await this.apiPost(
       `${OdaClient.API_BASE}/api/v1/cart/clear/`,

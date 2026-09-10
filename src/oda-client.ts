@@ -11,6 +11,9 @@ import {
   SavedListItem,
   ProductSummary,
   CartRecommendation,
+  DeliverySlot,
+  DeliveryDay,
+  DeliverySlots,
 } from "./types.js";
 import fs from "fs";
 
@@ -492,6 +495,65 @@ export class OdaClient {
     }
     const html = await response.text();
     return this.extractJsonLd(html);
+  }
+
+  // --- Delivery slots (read-only) ---
+
+  /**
+   * Read the delivery slot picker: upcoming slots grouped by local calendar
+   * day, with per-slot ordering deadlines. Read-only - this client
+   * deliberately has no checkout or slot selection.
+   */
+  async getDeliverySlots(): Promise<DeliverySlots> {
+    const response = await this.apiGet(
+      `${OdaClient.API_BASE}/api/v1/slot-picker/slots/`,
+    );
+    if (!response.ok) {
+      await this.throwApiError("Get delivery slots", response);
+    }
+    const data = (await response.json()) as any;
+    const timeZone = data.time_zone || "Europe/Oslo";
+    const dateFormat = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+
+    const days = new Map<string, DeliveryDay>();
+    for (const raw of data.delivery_slots || []) {
+      const priceLabel = String(raw.price ?? "");
+      const priceDigits = priceLabel.replace(/[^\d.,]/g, "").replace(",", ".");
+      const slot: DeliverySlot = {
+        id: raw.id,
+        starts_at: raw.open_datetime || "",
+        ends_at: raw.close_datetime || "",
+        deadline: raw.cutoff_time || "",
+        price: priceDigits ? parseFloat(priceDigits) : null,
+        price_label: priceLabel,
+        is_available: raw.is_full !== true && raw.is_unavailable !== true,
+      };
+      if (raw.is_cheapest === true) slot.is_cheapest = true;
+      if (raw.is_unavailable && raw.unavailable_description) {
+        slot.unavailable_description = raw.unavailable_description;
+      }
+
+      const date = slot.starts_at
+        ? dateFormat.format(new Date(slot.starts_at))
+        : "unknown";
+      let day = days.get(date);
+      if (!day) {
+        day = { date, slots: [] };
+        days.set(date, day);
+      }
+      day.slots.push(slot);
+    }
+
+    return {
+      time_zone: timeZone,
+      days: [...days.values()],
+      validation_messages: (data.validator_messages || []).map(String),
+    };
   }
 
   // --- Dump helper (for CLI discovery) ---

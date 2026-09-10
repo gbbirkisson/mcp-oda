@@ -755,3 +755,92 @@ describe("OdaClient frequent products request volume", () => {
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 });
+
+describe("OdaClient delivery slots", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("groups slots by local day and parses deadlines and prices", async () => {
+    const payload = {
+      time_zone: "Europe/Oslo",
+      delivery_slots: [
+        {
+          id: 1,
+          open_datetime: "2026-09-04T03:00:00Z",
+          close_datetime: "2026-09-04T05:00:00Z",
+          cutoff_time: "2026-09-03T18:00:00Z",
+          price: "kr 79",
+          is_full: false,
+          is_unavailable: false,
+          is_cheapest: true,
+        },
+        {
+          id: 2,
+          open_datetime: "2026-09-04T15:00:00Z",
+          close_datetime: "2026-09-04T17:00:00Z",
+          cutoff_time: "2026-09-04T10:00:00Z",
+          price: "kr 99",
+          is_full: true,
+          is_unavailable: false,
+        },
+        {
+          id: 3,
+          open_datetime: "2026-09-05T03:00:00Z",
+          close_datetime: "2026-09-05T05:00:00Z",
+          cutoff_time: "2026-09-04T18:00:00Z",
+          price: "kr 69",
+          is_full: false,
+          is_unavailable: true,
+          unavailable_description: "Ikke tilgjengelig",
+        },
+      ],
+      validator_messages: ["Noen varer er ikke tilgjengelige"],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(apiResponse(200, vi.fn().mockResolvedValue(payload))),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const slots = await client.getDeliverySlots();
+    expect(slots.time_zone).toBe("Europe/Oslo");
+    expect(slots.validation_messages).toEqual([
+      "Noen varer er ikke tilgjengelige",
+    ]);
+    expect(slots.days.map((d) => d.date)).toEqual([
+      "2026-09-04",
+      "2026-09-05",
+    ]);
+
+    const [day1, day2] = slots.days;
+    expect(day1.slots).toHaveLength(2);
+    expect(day1.slots[0]).toMatchObject({
+      id: 1,
+      deadline: "2026-09-03T18:00:00Z",
+      price: 79,
+      price_label: "kr 79",
+      is_available: true,
+      is_cheapest: true,
+    });
+    expect(day1.slots[1].is_available).toBe(false);
+    expect(day2.slots[0]).toMatchObject({
+      is_available: false,
+      unavailable_description: "Ikke tilgjengelig",
+    });
+  });
+
+  it("raises with the auth hint on 403", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(apiResponse(403, vi.fn(), "forbidden")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.getDeliverySlots()).rejects.toThrow(
+      /Get delivery slots failed: HTTP 403/,
+    );
+  });
+});

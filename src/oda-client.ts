@@ -1064,7 +1064,14 @@ export class OdaClient {
       return true;
     }
 
-    return false;
+    // Only credential-type rejections mean "wrong username/password"; a 5xx
+    // or anything unexpected is a server problem and must not be reported as
+    // bad credentials.
+    if ([400, 401, 403].includes(response.status)) {
+      return false;
+    }
+    await this.throwApiError("Login", response);
+    return false; // unreachable, throwApiError always throws
   }
 
   async checkUser(): Promise<string | null> {

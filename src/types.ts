@@ -23,6 +23,26 @@ export interface CartItem {
   relative_price_unit: string;
 }
 
+export interface CartLine extends CartItem {
+  /** Cart line id, distinct from the product id. */
+  item_id: number;
+  /** Total price for the line (quantity x price, weight-adjusted by Oda). */
+  line_total: number;
+  /** Group heading (e.g. a recipe name) when the item belongs to a group. */
+  group_title?: string;
+  group_type?: string;
+}
+
+export interface Cart {
+  /** Human-readable cart label, e.g. "30 varer". */
+  label_text: string;
+  product_quantity_count: number;
+  /** What the cart costs at current prices. */
+  display_price: number;
+  total_gross_amount: number;
+  items: CartLine[];
+}
+
 export interface Recipe {
   id: number;
   name: string;

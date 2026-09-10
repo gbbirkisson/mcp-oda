@@ -45,10 +45,25 @@ export interface RecipePage {
   has_more: boolean;
 }
 
+export interface RecipeIngredient {
+  title: string;
+  quantity: number;
+  unit: string;
+  /** Purchasable product behind the ingredient, when Oda maps one. */
+  product_id?: number;
+  /** Cart quantity per portion, as used when adding the recipe to the cart. */
+  portion_quantity?: number;
+}
+
 export interface RecipeDetail {
   name: string;
   description: string;
   ingredients: string[];
+  /**
+   * Structured ingredients with product mapping. Absent when the recipe was
+   * loaded from the JSON-LD fallback, which carries no product IDs.
+   */
+  ingredient_items?: RecipeIngredient[];
   instructions: string[];
   image_url?: string;
 }

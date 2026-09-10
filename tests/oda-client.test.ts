@@ -755,3 +755,66 @@ describe("OdaClient frequent products request volume", () => {
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 });
+
+describe("OdaClient recipe ingredient mapping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const recipeData = {
+    title: "Pizza Margherita",
+    lead: "Klassisk pizza",
+    ingredientsDisplayList: [
+      { title: "Mozzarella, fersk", displayQuantity: "250", displayUnit: "g" },
+      { title: "Basilikum", displayQuantity: "1", displayUnit: "pott" },
+    ],
+    ingredients: [
+      {
+        product: { id: 4321, full_name: "Mozzarella" },
+        portionQuantity: "0.5",
+      },
+      {},
+    ],
+    instructions: { instructions: [{ text: "Stek pizzaen" }] },
+  };
+
+  const hydrationHtml = () => {
+    const queries = [
+      { queryKey: [{ _id: "recipeDetailApi" }], state: { data: recipeData } },
+    ];
+    return `<html><script>self.__next_f.push([1,${JSON.stringify(
+      `"queries":${JSON.stringify(queries)}`,
+    )}])</script></html>`;
+  };
+
+  it("exposes structured ingredients with product mapping", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { getSetCookie: () => [], get: () => "text/html" },
+        json: vi.fn(),
+        text: vi.fn().mockResolvedValue(hydrationHtml()),
+      }),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const detail = await client.getRecipeDetails(1);
+    expect(detail.name).toBe("Pizza Margherita");
+    expect(detail.ingredients).toEqual([
+      "250 g Mozzarella, fersk",
+      "1 pott Basilikum",
+    ]);
+    expect(detail.ingredient_items).toEqual([
+      {
+        title: "Mozzarella, fersk",
+        quantity: 250,
+        unit: "g",
+        product_id: 4321,
+        portion_quantity: 0.5,
+      },
+      { title: "Basilikum", quantity: 1, unit: "pott" },
+    ]);
+  });
+});

@@ -6,6 +6,7 @@ import {
   RecipeFilter,
   RecipePage,
   RecipeDetail,
+  RecipeIngredient,
   SavedList,
   SavedListDetail,
   SavedListItem,
@@ -1002,18 +1003,47 @@ export class OdaClient {
       },
     );
 
+    // Structured ingredients with the product mapping addRecipeToCart uses,
+    // so callers can see what a recipe would put in the cart without adding
+    // it. data.ingredients[] carries the product link; join it with the
+    // display list by index when the lists line up, else fall back to the
+    // ingredient's own display fields.
+    const rawIngredients: any[] = data.ingredients || [];
+    const displayList: any[] = data.ingredientsDisplayList || [];
+    const ingredientItems = rawIngredients.map((ing: any, i: number) => {
+      const display = displayList[i] || {};
+      const item: RecipeIngredient = {
+        title: display.title || ing.product?.full_name || ing.title || "",
+        quantity:
+          parseFloat(display.displayQuantity ?? ing.displayQuantity) || 0,
+        unit: display.displayUnit ?? ing.displayUnit ?? "",
+      };
+      if (ing.product?.id) {
+        item.product_id = ing.product.id;
+        const portionQuantity = parseFloat(ing.portionQuantity);
+        if (Number.isFinite(portionQuantity)) {
+          item.portion_quantity = portionQuantity;
+        }
+      }
+      return item;
+    });
+
     // Instructions
     const instructions: string[] = (data.instructions?.instructions || []).map(
       (step: any) => step.text || "",
     );
 
-    return {
+    const detail: RecipeDetail = {
       name,
       description,
       ingredients,
       instructions,
       image_url: imageUrl,
     };
+    if (ingredientItems.length > 0) {
+      detail.ingredient_items = ingredientItems;
+    }
+    return detail;
   }
 
   async addRecipeToCart(recipeId: number, portions: number): Promise<void> {

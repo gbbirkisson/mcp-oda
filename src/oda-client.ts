@@ -838,16 +838,17 @@ export class OdaClient {
       throw new Error("Server returned 425 Too Early. Please try again later.");
     }
     if (!response.ok) {
-      return [];
+      // An expired session must not look like an empty cart
+      await this.throwApiError("Get cart", response);
     }
 
+    let data: any;
     try {
-      const data = await response.json();
-      return this.parseCartApi(data);
+      data = await response.json();
     } catch (e) {
-      console.error("Failed to parse cart API response", e);
-      return [];
+      throw new Error(`Get cart failed: unparseable response (${e})`);
     }
+    return this.parseCartApi(data);
   }
 
   private parseCartApi(data: any): CartItem[] {

@@ -755,3 +755,83 @@ describe("OdaClient frequent products request volume", () => {
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 });
+
+describe("OdaClient session cookie persistence", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const responseWithCookies = (cookies: string[]) => ({
+    ok: true,
+    status: 200,
+    headers: { getSetCookie: () => cookies },
+    json: vi.fn().mockResolvedValue({ items: [] }),
+    text: vi.fn().mockResolvedValue(""),
+  });
+
+  it("persists refreshed cookies to an existing cookie file", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "old" }), {
+      mode: 0o600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          responseWithCookies(["sessionid=new; Path=/; HttpOnly"]),
+        ),
+    );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      const saved = JSON.parse(fs.readFileSync(cookiePath, "utf-8"));
+      expect(saved.sessionid).toBe("new");
+      expect(fs.statSync(cookiePath).mode & 0o777).toBe(0o600);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the cookie file untouched when Set-Cookie changes nothing", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "same" }), {
+      mode: 0o600,
+    });
+    const before = fs.statSync(cookiePath).mtimeMs;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(responseWithCookies(["sessionid=same; Path=/"])),
+    );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      expect(fs.statSync(cookiePath).mtimeMs).toBe(before);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not create a cookie file for an anonymous client", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(responseWithCookies(["sessionid=anon"])),
+    );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      expect(fs.existsSync(cookiePath)).toBe(false);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});

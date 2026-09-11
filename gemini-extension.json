@@ -1,7 +1,7 @@
 {
   "name": "mcp-oda",
   "description": "Integration with Oda for searching products and managing your shopping cart.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "mcpServers": {
     "oda": {
       "command": "sh",

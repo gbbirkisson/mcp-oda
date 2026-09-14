@@ -182,43 +182,11 @@ function requireSearchData(
   return data;
 }
 
-export function parseProductPage(url: string, nextData: any): ProductPage {
-  const data = requireSearchData(
-    url,
-    nextData,
-    "product",
-    "searchpageresponse",
-  );
-  const items: SearchResult[] = [];
-
-  for (const item of data.items) {
-    if (item.type !== "product") continue;
-    const a = item.attributes;
-    if (!a) continue;
-
-    const unitPriceUnit = a.unitPriceQuantityAbbreviation || "";
-
-    items.push({
-      id: a.id || item.id,
-      name: a.fullName || a.name || "Unknown",
-      subtitle: a.nameExtra || "",
-      price: parseFloat(a.grossPrice) || 0,
-      relative_price: parseFloat(a.grossUnitPrice) || 0,
-      relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
-    });
-  }
-
-  return {
-    page_url: url,
-    items,
-    has_more: data.attributes?.hasMoreItems === true,
-  };
-}
-
-export function parseRecipePage(url: string, nextData: any): RecipePage {
-  const data = requireSearchData(url, nextData, "recipe", "searchresponse");
-
-  // Filters: data.filters[] can be a filtergroup or a flat filter
+/**
+ * Parse the filters block shared by product and recipe search payloads.
+ * Filters arrive either grouped (filtergroup with items) or flat.
+ */
+function parseSearchFilters(data: any): RecipeFilter[] {
   const filters: RecipeFilter[] = [];
   for (const f of data.filters || []) {
     if (f.type === "filtergroup" && f.items) {
@@ -240,6 +208,87 @@ export function parseRecipePage(url: string, nextData: any): RecipePage {
       });
     }
   }
+  return filters;
+}
+
+export function parseProductPage(url: string, nextData: any): ProductPage {
+  const data = requireSearchData(
+    url,
+    nextData,
+    "product",
+    "searchpageresponse",
+  );
+  const items: SearchResult[] = [];
+
+  for (const item of data.items) {
+    if (item.type !== "product") continue;
+    const a = item.attributes;
+    if (!a) continue;
+
+    const unitPriceUnit = a.unitPriceQuantityAbbreviation || "";
+
+    const result: SearchResult = {
+      id: a.id || item.id,
+      name: a.fullName || a.name || "Unknown",
+      subtitle: a.nameExtra || "",
+      price: parseFloat(a.grossPrice) || 0,
+      relative_price: parseFloat(a.grossUnitPrice) || 0,
+      relative_price_unit: unitPriceUnit ? `/${unitPriceUnit}` : "",
+    };
+
+    if (a.brand) result.brand = a.brand;
+    if (a.currency) result.currency = a.currency;
+    if (a.availability) {
+      result.is_available = a.availability.isAvailable === true;
+      if (a.availability.code && a.availability.code !== "available") {
+        result.availability_code = a.availability.code;
+      }
+    }
+    if (a.discount?.isDiscounted) {
+      result.discount = {
+        undiscounted_price: parseFloat(a.discount.undiscountedGrossPrice) || 0,
+      };
+      if (a.discount.descriptionShort) {
+        result.discount.description = a.discount.descriptionShort;
+      }
+      if (a.discount.maximumQuantity) {
+        result.discount.maximum_quantity = a.discount.maximumQuantity;
+      }
+    }
+    const thumbnail = a.images?.[0]?.thumbnail?.url;
+    if (thumbnail) result.image_url = thumbnail;
+
+    items.push(result);
+  }
+
+  const page: ProductPage = {
+    page_url: url,
+    items,
+    has_more: data.attributes?.hasMoreItems === true,
+  };
+
+  const typeCounts: Record<string, number> = {};
+  for (const rt of data.attributes?.requestTypes || []) {
+    if (rt.type && Number.isFinite(rt.count)) {
+      typeCounts[rt.type] = rt.count;
+    }
+  }
+  if (Object.keys(typeCounts).length > 0) {
+    page.type_counts = typeCounts;
+    if (typeCounts["product"] !== undefined) {
+      page.total_count = typeCounts["product"];
+    }
+  }
+  const filters = parseSearchFilters(data);
+  if (filters.length > 0) page.filters = filters;
+
+  return page;
+}
+
+export function parseRecipePage(url: string, nextData: any): RecipePage {
+  const data = requireSearchData(url, nextData, "recipe", "searchresponse");
+
+  const filters = parseSearchFilters(data);
 
   const items: Recipe[] = [];
   for (const item of data.items) {
@@ -499,25 +548,39 @@ export class OdaClient {
 
   async dump(url: string): Promise<{
     nextData: any | null;
+    jsonBody: any | null;
     queryKeys: string[];
     headers: Record<string, string>;
     status: number;
     finalUrl: string;
   }> {
     const response = await this.getFollowRedirects(url);
-    const html = await response.text();
+    const body = await response.text();
 
     const responseHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
 
-    const nextData = extractNextData(html);
+    // JSON API endpoints have no hydration payload - surface the raw body
+    // instead so dump works for API discovery too.
+    let jsonBody: any | null = null;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        jsonBody = JSON.parse(body);
+      } catch {
+        // fall through with jsonBody = null
+      }
+    }
+
+    const nextData = jsonBody === null ? extractNextData(body) : null;
     const queries: any[] =
       nextData?.props?.pageProps?.dehydratedState?.queries ?? [];
 
     return {
       nextData,
+      jsonBody,
       queryKeys: queries.map((q) => describeQueryKey(q.queryKey)),
       headers: responseHeaders,
       status: response.status,
@@ -839,16 +902,17 @@ export class OdaClient {
       throw new Error("Server returned 425 Too Early. Please try again later.");
     }
     if (!response.ok) {
-      return [];
+      // An expired session must not look like an empty cart
+      await this.throwApiError("Get cart", response);
     }
 
+    let data: any;
     try {
-      const data = await response.json();
-      return this.parseCartApi(data);
+      data = await response.json();
     } catch (e) {
-      console.error("Failed to parse cart API response", e);
-      return [];
+      throw new Error(`Get cart failed: unparseable response (${e})`);
     }
+    return this.parseCartApi(data);
   }
 
   private parseCartApi(data: any): CartItem[] {

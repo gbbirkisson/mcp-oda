@@ -12,12 +12,13 @@ Call the `cart_get_contents` tool to retrieve the current cart contents.
 
 Present a summary with:
 - Items grouped by category
-- Total estimated cost
+- Total cost: use the cart's `display_price` and each line's `line_total`, not price x quantity
+  (weight-priced items make that inaccurate)
 - Any observations: duplicates, missing staples, or cheaper alternatives worth considering
 
 ## Step 3: Suggest pruning
 
-Recipe ingredients often overlap. Multiple recipes may each add salt, pepper, olive oil, or
+Recipe ingredients often overlap (a line's `group_title` names the recipe that added it). Multiple recipes may each add salt, pepper, olive oil, or
 common herbs/spices. I usually already have these at home. Identify items that are likely
 duplicates or pantry staples I already own and propose removing them. Show the estimated
 savings.

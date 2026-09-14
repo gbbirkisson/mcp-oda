@@ -43,7 +43,9 @@ This MCP server provides tools to programmatically interact with Oda's grocery s
 - **Saved shopping lists** - View your saved lists, add or remove products, and
   import a whole list into the cart
 - **Purchase history** - See your most frequently ordered products
-- **Manage shopping cart** - View cart contents, add/remove items, add recipe ingredients
+- **Manage shopping cart** - View cart contents and recommendations, add/remove items or set
+  exact quantities, add recipe ingredients
+- **Delivery slots** - See upcoming delivery slots, prices and ordering deadlines (read-only)
 - **CLI access** - All operations available as CLI subcommands in addition to MCP tools
 - **Session persistence** - Maintains login session across restarts
 
@@ -102,8 +104,10 @@ npx github:gbbirkisson/mcp-oda purchases frequent --limit 10 --max-orders 50
 
 # Cart
 npx github:gbbirkisson/mcp-oda cart list
-npx github:gbbirkisson/mcp-oda cart recommendations
+npx github:gbbirkisson/mcp-oda cart recommendations --limit 10 --exclude-in-cart
 npx github:gbbirkisson/mcp-oda cart remove 132
+# Sets the total quantity of a product; 0 removes it
+npx github:gbbirkisson/mcp-oda cart set 132 --count 3
 # Clears the whole cart; requires an explicit confirmation string
 npx github:gbbirkisson/mcp-oda cart clear --confirmation "CLEAR CART"
 
@@ -112,6 +116,9 @@ npx github:gbbirkisson/mcp-oda recipe search pizza
 npx github:gbbirkisson/mcp-oda recipe details 123
 npx github:gbbirkisson/mcp-oda recipe add 123 --portions 4
 npx github:gbbirkisson/mcp-oda recipe remove 123
+
+# Delivery slots and ordering deadlines (read-only)
+npx github:gbbirkisson/mcp-oda delivery slots
 
 # Authentication
 read -rsp "Oda password: " ODA_PASSWORD; printf '\n'

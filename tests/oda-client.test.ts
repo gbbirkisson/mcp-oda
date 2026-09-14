@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { OdaClient } from "../src/oda-client.js";
+import { OdaClient, summarizeCartMutation } from "../src/oda-client.js";
 
 const apiResponse = (
   status: number,
@@ -1189,9 +1189,20 @@ describe("OdaClient delivery slots", () => {
           is_full: false,
           is_unavailable: true,
           unavailable_description: "Ikke tilgjengelig",
+          validation_messages: [
+            {
+              type: "product_availability_date",
+              description: "Varen er utsolgt",
+            },
+          ],
         },
       ],
-      validator_messages: ["Noen varer er ikke tilgjengelige"],
+      validation_messages: [
+        {
+          type: "product_availability_date",
+          description: "Noen varer er ikke tilgjengelige",
+        },
+      ],
     };
     vi.stubGlobal(
       "fetch",
@@ -1222,9 +1233,11 @@ describe("OdaClient delivery slots", () => {
       is_cheapest: true,
     });
     expect(day1.slots[1].is_available).toBe(false);
+    expect(day1.slots[0].validation_messages).toBeUndefined();
     expect(day2.slots[0]).toMatchObject({
       is_available: false,
       unavailable_description: "Ikke tilgjengelig",
+      validation_messages: ["Varen er utsolgt"],
     });
   });
 
@@ -1237,6 +1250,319 @@ describe("OdaClient delivery slots", () => {
 
     await expect(client.getDeliverySlots()).rejects.toThrow(
       /Get delivery slots failed: HTTP 403/,
+    );
+  });
+});
+
+describe("OdaClient cookie persistence failures", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps serving API calls when the cookie file cannot be written", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "old" }), {
+      mode: 0o600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ...apiResponse(200, vi.fn().mockResolvedValue({ items: [] })),
+        headers: { getSetCookie: () => ["sessionid=new; Path=/"] },
+      }),
+    );
+    vi.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw Object.assign(new Error("read-only"), { code: "EROFS" });
+    });
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await expect(client.getCartContents()).resolves.toMatchObject({
+        items: [],
+      });
+    } finally {
+      vi.restoreAllMocks();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("OdaClient recipe ingredient id join", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const hydrationHtml = (recipeData: unknown) => {
+    const queries = [
+      { queryKey: [{ _id: "recipeDetailApi" }], state: { data: recipeData } },
+    ];
+    return `<html><script>self.__next_f.push([1,${JSON.stringify(
+      `"queries":${JSON.stringify(queries)}`,
+    )}])</script></html>`;
+  };
+
+  it("joins display entries to products by id, not position", async () => {
+    const recipeData = {
+      title: "Taco",
+      ingredientsDisplayList: [
+        {
+          id: 1,
+          title: "Tortilla",
+          displayQuantity: "8.000",
+          displayUnit: "stk",
+        },
+        { id: 2, title: "Salt", displayQuantity: "1.000", displayUnit: "ts" },
+        {
+          id: 3,
+          title: "Kjøttdeig",
+          displayQuantity: "400.000",
+          displayUnit: "g",
+        },
+      ],
+      ingredients: [
+        {
+          id: 3,
+          ingredient: { id: 30, title: "Kjøttdeig" },
+          portionQuantity: "0.250",
+          product: { id: 300, fullName: "Kjøttdeig 400 g" },
+        },
+        {
+          id: 1,
+          ingredient: { id: 10, title: "Tortilla" },
+          portionQuantity: "2.000",
+          product: { id: 100, fullName: "Tortilla 8 stk" },
+        },
+        {
+          id: 4,
+          ingredient: { id: 40, title: "Rømme" },
+          portionQuantity: "0.500",
+          product: { id: 400, fullName: "Rømme 300 g" },
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { getSetCookie: () => [], get: () => "text/html" },
+        json: vi.fn(),
+        text: vi.fn().mockResolvedValue(hydrationHtml(recipeData)),
+      }),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const detail = await client.getRecipeDetails(1);
+    expect(detail.ingredient_items).toEqual([
+      {
+        title: "Tortilla",
+        quantity: 8,
+        unit: "stk",
+        product_id: 100,
+        portion_quantity: 2,
+      },
+      { title: "Salt", quantity: 1, unit: "ts" },
+      {
+        title: "Kjøttdeig",
+        quantity: 400,
+        unit: "g",
+        product_id: 300,
+        portion_quantity: 0.25,
+      },
+      {
+        title: "Rømme",
+        quantity: 0,
+        unit: "",
+        product_id: 400,
+        portion_quantity: 0.5,
+      },
+    ]);
+  });
+});
+
+describe("OdaClient cart mutations", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const cartPayload = (quantity: number, otherProduct = false) => ({
+    label_text: `${quantity} varer`,
+    product_quantity_count: quantity,
+    display_price: "10.00",
+    total_gross_amount: "10.00",
+    items: [
+      ...(quantity > 0
+        ? [
+            {
+              item_id: 1,
+              quantity,
+              display_price_total: "10.00",
+              product: { id: 7, full_name: "Vare", gross_price: "5.00" },
+            },
+          ]
+        : []),
+      ...(otherProduct
+        ? [
+            {
+              item_id: 2,
+              quantity: 1,
+              display_price_total: "3.00",
+              product: { id: 8, full_name: "Annen vare", gross_price: "3.00" },
+            },
+          ]
+        : []),
+    ],
+  });
+  const cartResponse = (quantity: number, otherProduct = false) =>
+    apiResponse(
+      200,
+      vi.fn().mockResolvedValue(cartPayload(quantity, otherProduct)),
+    );
+  const postedItems = (fetchMock: ReturnType<typeof vi.fn>, call: number) =>
+    JSON.parse(fetchMock.mock.calls[call][1].body).items;
+
+  it("addToCart returns the cart from the POST response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(cartResponse(1));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.addToCart(7);
+    expect(cart.product_quantity_count).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads the cart when a mutation response is not a cart", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(apiResponse(200, vi.fn().mockResolvedValue({})))
+      .mockResolvedValueOnce(cartResponse(2));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.removeFromCart(7);
+    expect(cart.product_quantity_count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("setCartQuantity posts the delta needed to reach the target", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(cartResponse(2))
+      .mockResolvedValueOnce(cartResponse(5));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.setCartQuantity(7, 5);
+    expect(cart.product_quantity_count).toBe(5);
+    expect(postedItems(fetchMock, 1)).toEqual([{ product_id: 7, quantity: 3 }]);
+  });
+
+  it("setCartQuantity posts a negative delta down to zero", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(cartResponse(2))
+      .mockResolvedValueOnce(cartResponse(0));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await client.setCartQuantity(7, 0);
+    expect(postedItems(fetchMock, 1)).toEqual([
+      { product_id: 7, quantity: -2 },
+    ]);
+  });
+
+  it("setCartQuantity does not post when the cart already matches", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(cartResponse(2));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.setCartQuantity(7, 2);
+    expect(cart.product_quantity_count).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("setCartQuantity rejects non-integer and negative quantities", async () => {
+    const client = new OdaClient("/nonexistent/cookies.json");
+    await expect(client.setCartQuantity(7, 1.5)).rejects.toThrow(
+      /non-negative integer/,
+    );
+    await expect(client.setCartQuantity(7, -1)).rejects.toThrow(
+      /non-negative integer/,
+    );
+  });
+
+  it("summarizes a mutation as cart totals plus the product's lines", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(cartResponse(1, true)));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const summary = summarizeCartMutation(await client.addToCart(7), 7);
+    expect(summary).toMatchObject({
+      label_text: "1 varer",
+      product_quantity_count: 1,
+      display_price: 10,
+    });
+    expect(summary.lines.map((line) => line.id)).toEqual([7]);
+  });
+});
+
+describe("OdaClient cart recommendation options", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const recommendations = {
+    groups: [
+      {
+        items: [1, 2, 3, 4].map((id) => ({
+          id,
+          full_name: `Vare ${id}`,
+          gross_price: "10.00",
+        })),
+      },
+    ],
+  };
+  const fetchWithCart = (cartIds: number[]) =>
+    vi.fn((url: string) =>
+      Promise.resolve(
+        url.includes("/recommendations/")
+          ? apiResponse(200, vi.fn().mockResolvedValue(recommendations))
+          : apiResponse(
+              200,
+              vi.fn().mockResolvedValue({
+                items: cartIds.map((id) => ({
+                  quantity: 1,
+                  product: { id, full_name: `Vare ${id}` },
+                })),
+              }),
+            ),
+      ),
+    );
+
+  it("stops at the limit", async () => {
+    vi.stubGlobal("fetch", fetchWithCart([]));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const recs = await client.getCartRecommendations({ limit: 2 });
+    expect(recs.map((r) => r.id)).toEqual([1, 2]);
+  });
+
+  it("still fills the limit after excluding products in the cart", async () => {
+    vi.stubGlobal("fetch", fetchWithCart([1, 2]));
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const recs = await client.getCartRecommendations({
+      limit: 2,
+      excludeInCart: true,
+    });
+    expect(recs.map((r) => r.id)).toEqual([3, 4]);
+  });
+
+  it("rejects a non-positive limit", async () => {
+    const client = new OdaClient("/nonexistent/cookies.json");
+    await expect(client.getCartRecommendations({ limit: 0 })).rejects.toThrow(
+      /positive integer/,
     );
   });
 });

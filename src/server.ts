@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createRequire } from "node:module";
-import { OdaClient } from "./oda-client.js";
+import { OdaClient, summarizeCartMutation } from "./oda-client.js";
 import fs from "fs";
 import path from "path";
 
@@ -112,11 +112,23 @@ export class OdaServer {
       "cart_get_recommendations",
       {
         description:
-          "Read Oda's current cart recommendations as a normalized product list. Read-only; recommendations may be empty when the cart is empty.",
+          "Read Oda's current cart recommendations as a normalized product list. Read-only; recommendations may be empty when the cart is empty. Set exclude_in_cart to drop products already in the cart.",
+        inputSchema: {
+          limit: z.number().int().min(1).max(50).optional(),
+          exclude_in_cart: z.boolean().optional(),
+        },
       },
-      this.toolHandler("cart_get_recommendations", async () => {
-        return this.jsonResult(await this.getClient().getCartRecommendations());
-      }),
+      this.toolHandler(
+        "cart_get_recommendations",
+        async ({ limit, exclude_in_cart }) => {
+          return this.jsonResult(
+            await this.getClient().getCartRecommendations({
+              limit,
+              excludeInCart: exclude_in_cart,
+            }),
+          );
+        },
+      ),
     );
 
     this.mcpServer.registerTool(
@@ -240,15 +252,32 @@ export class OdaServer {
     this.mcpServer.registerTool(
       "cart_remove_item",
       {
-        description: "Remove a product from the cart by product ID.",
+        description:
+          "Remove a product from the cart by product ID. Returns the cart totals and the product's remaining cart lines.",
         inputSchema: {
           id: z.number().int().positive(),
           count: z.number().int().positive().optional(),
         },
       },
       this.toolHandler("cart_remove_item", async ({ id, count }) => {
-        await this.getClient().removeFromCart(id, count);
-        return this.textResult("Item removed");
+        const cart = await this.getClient().removeFromCart(id, count);
+        return this.jsonResult(summarizeCartMutation(cart, id));
+      }),
+    );
+
+    this.mcpServer.registerTool(
+      "cart_set_quantity",
+      {
+        description:
+          "Set the ABSOLUTE quantity of a product in the cart (add/remove apply relative deltas). Counts all cart lines for the product, recipe lines included. Quantity 0 removes it. Returns the cart totals and the product's cart lines.",
+        inputSchema: {
+          id: z.number().int().positive(),
+          quantity: z.number().int().min(0),
+        },
+      },
+      this.toolHandler("cart_set_quantity", async ({ id, quantity }) => {
+        const cart = await this.getClient().setCartQuantity(id, quantity);
+        return this.jsonResult(summarizeCartMutation(cart, id));
       }),
     );
 
@@ -282,15 +311,16 @@ export class OdaServer {
     this.mcpServer.registerTool(
       "product_add_to_cart",
       {
-        description: "Add a product to the cart by product ID.",
+        description:
+          "Add a product to the cart by product ID. Returns the cart totals and the product's cart lines.",
         inputSchema: {
           id: z.number().int().positive(),
           count: z.number().int().positive().optional(),
         },
       },
       this.toolHandler("product_add_to_cart", async ({ id, count }) => {
-        await this.getClient().addToCart(id, count);
-        return this.textResult("Product added");
+        const cart = await this.getClient().addToCart(id, count);
+        return this.jsonResult(summarizeCartMutation(cart, id));
       }),
     );
 

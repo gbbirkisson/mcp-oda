@@ -28,6 +28,7 @@ include an `id` field for each item. Use these IDs directly with mutation tools:
 - `cart_get_contents()` — get the current shopping cart contents.
 - `product_add_to_cart({ id })` — add a product by its ID from search results.
 - `cart_remove_item({ id })` — remove a product from the cart by its product ID.
+- `cart_set_quantity({ id, quantity })`: set the total quantity of a product in the cart; 0 removes it.
 - `recipes_get_details({ id })` — get details for a recipe by its ID from search results.
 - `recipe_add_to_cart({ id, portions })` — add recipe ingredients to the cart by recipe ID.
 - `recipe_remove_from_cart({ id })` — remove a recipe and its ingredients from the cart by recipe ID.

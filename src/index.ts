@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { OdaServer } from "./server.js";
-import { OdaClient } from "./oda-client.js";
+import { OdaClient, summarizeCartMutation } from "./oda-client.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -136,8 +136,11 @@ productCmd
   .option("--count <number>", "Quantity to add", "1")
   .action(async (id: string, cmdOpts) => {
     const client = makeClient();
-    await client.addToCart(parseInt(id), parseInt(cmdOpts.count));
-    console.log("Product added to cart.");
+    const productId = parseInt(id);
+    const cart = await client.addToCart(productId, parseInt(cmdOpts.count));
+    console.log(
+      JSON.stringify(summarizeCartMutation(cart, productId), null, 2),
+    );
   });
 
 // --- saved-list commands ---
@@ -255,8 +258,30 @@ cartCmd
   .option("--count <number>", "Quantity to remove", "1")
   .action(async (id: string, cmdOpts) => {
     const client = makeClient();
-    await client.removeFromCart(parseInt(id), parseInt(cmdOpts.count));
-    console.log("Product removed from cart.");
+    const productId = parseInt(id);
+    const cart = await client.removeFromCart(
+      productId,
+      parseInt(cmdOpts.count),
+    );
+    console.log(
+      JSON.stringify(summarizeCartMutation(cart, productId), null, 2),
+    );
+  });
+
+cartCmd
+  .command("set <id>")
+  .description("Set the total quantity of a product in the cart")
+  .requiredOption("--count <number>", "Target quantity, 0 removes it")
+  .action(async (id: string, cmdOpts) => {
+    const client = makeClient();
+    const productId = parseInt(id);
+    const cart = await client.setCartQuantity(
+      productId,
+      parseInt(cmdOpts.count),
+    );
+    console.log(
+      JSON.stringify(summarizeCartMutation(cart, productId), null, 2),
+    );
   });
 
 cartCmd
@@ -275,9 +300,15 @@ cartCmd
 cartCmd
   .command("recommendations")
   .description("Show Oda's current cart recommendations")
-  .action(async () => {
+  .option("--limit <number>", "Maximum number of recommendations", "20")
+  .option("--exclude-in-cart", "Hide products already in the cart")
+  .action(async (cmdOpts) => {
     const client = makeClient();
-    console.log(JSON.stringify(await client.getCartRecommendations(), null, 2));
+    const recommendations = await client.getCartRecommendations({
+      limit: parseInt(cmdOpts.limit),
+      excludeInCart: cmdOpts.excludeInCart === true,
+    });
+    console.log(JSON.stringify(recommendations, null, 2));
   });
 
 // --- recipe commands ---

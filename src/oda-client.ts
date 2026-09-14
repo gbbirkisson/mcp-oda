@@ -3,6 +3,7 @@ import {
   ProductPage,
   Cart,
   CartLine,
+  CartMutationResult,
   Recipe,
   RecipeFilter,
   RecipePage,
@@ -405,7 +406,11 @@ export class OdaClient {
     // only into an existing cookie file - an anonymous client (no login,
     // no file) should never leave a cookie file behind.
     if (changed && fs.existsSync(this.cookiePath)) {
-      this.saveCookies();
+      try {
+        this.saveCookies();
+      } catch {
+        // An unwritable cookie file must not break API calls
+      }
     }
   }
 
@@ -598,6 +603,8 @@ export class OdaClient {
       if (raw.is_unavailable && raw.unavailable_description) {
         slot.unavailable_description = raw.unavailable_description;
       }
+      const slotMessages = OdaClient.messageTexts(raw.validation_messages);
+      if (slotMessages.length > 0) slot.validation_messages = slotMessages;
 
       const date = slot.starts_at
         ? dateFormat.format(new Date(slot.starts_at))
@@ -613,8 +620,18 @@ export class OdaClient {
     return {
       time_zone: timeZone,
       days: [...days.values()],
-      validation_messages: (data.validator_messages || []).map(String),
+      validation_messages: OdaClient.messageTexts(data.validation_messages),
     };
+  }
+
+  // Oda validation messages are {type, description} objects
+  private static messageTexts(messages: unknown): string[] {
+    if (!Array.isArray(messages)) return [];
+    return messages
+      .map((m) => (typeof m === "string" ? m : m?.description))
+      .filter(
+        (text): text is string => typeof text === "string" && text !== "",
+      );
   }
 
   // --- Dump helper (for CLI discovery) ---
@@ -777,14 +794,30 @@ export class OdaClient {
       .slice(0, limit);
   }
 
-  async getCartRecommendations(): Promise<CartRecommendation[]> {
-    const response = await this.apiGet(
-      `${OdaClient.API_BASE}/api/v1/cart/recommendations/`,
-    );
+  async getCartRecommendations(
+    options: { limit?: number; excludeInCart?: boolean } = {},
+  ): Promise<CartRecommendation[]> {
+    const limit = options.limit ?? 20;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new Error(`Limit must be a positive integer: ${limit}`);
+    }
+    const [response, cart] = await Promise.all([
+      this.apiGet(`${OdaClient.API_BASE}/api/v1/cart/recommendations/`),
+      options.excludeInCart ? this.getCartContents() : null,
+    ]);
     if (!response.ok) {
       await this.throwApiError("Get cart recommendations", response);
     }
-    return OdaClient.collectRecommendedProducts(await response.json());
+    const data = await response.json();
+    if (!cart) {
+      return OdaClient.collectRecommendedProducts(data, limit);
+    }
+    // Oda often recommends products already in the cart, so collect extra to
+    // still fill the limit after dropping them.
+    const inCart = new Set(cart.items.map((item) => item.id));
+    return OdaClient.collectRecommendedProducts(data, limit + inCart.size)
+      .filter((product) => !inCart.has(product.id))
+      .slice(0, limit);
   }
 
   /**
@@ -904,7 +937,10 @@ export class OdaClient {
         lists.push(this.parseSavedList(list));
       }
       url = data.next
-        ? OdaClient.resolveOdaUrl(String(data.next), "saved list pagination URL")
+        ? OdaClient.resolveOdaUrl(
+            String(data.next),
+            "saved list pagination URL",
+          )
         : null;
     }
     return lists;
@@ -1052,16 +1088,17 @@ export class OdaClient {
     };
   }
 
-  async addToCart(productId: number, count = 1): Promise<void> {
+  async addToCart(productId: number, count = 1): Promise<Cart> {
     const response = await this.apiPost(OdaClient.CART_ITEMS_API, {
       items: [{ product_id: productId, quantity: count }],
     });
     if (!response.ok) {
       await this.throwApiError("Add to cart", response);
     }
+    return this.cartAfterMutation(response);
   }
 
-  async removeFromCart(productId: number, count = 1): Promise<void> {
+  async removeFromCart(productId: number, count = 1): Promise<Cart> {
     const response = await this.apiPost(
       OdaClient.CART_ITEMS_API,
       { items: [{ product_id: productId, quantity: -count }] },
@@ -1070,6 +1107,49 @@ export class OdaClient {
     if (!response.ok) {
       await this.throwApiError("Remove from cart", response);
     }
+    return this.cartAfterMutation(response);
+  }
+
+  /**
+   * Set the total quantity of a product across all cart lines, recipe lines
+   * included. The cart API only takes relative deltas, so this reads the cart
+   * and posts the difference; a concurrent cart change in between can make the
+   * final quantity differ.
+   */
+  async setCartQuantity(productId: number, quantity: number): Promise<Cart> {
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      throw new Error(`Quantity must be a non-negative integer: ${quantity}`);
+    }
+    const cart = await this.getCartContents();
+    const current = cart.items
+      .filter((item) => item.id === productId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    const delta = quantity - current;
+    if (delta === 0) {
+      return cart;
+    }
+    const response = await this.apiPost(
+      OdaClient.CART_ITEMS_API,
+      { items: [{ product_id: productId, quantity: delta }] },
+      `${OdaClient.BASE_URL}/cart/`,
+    );
+    if (!response.ok) {
+      await this.throwApiError("Set cart quantity", response);
+    }
+    return this.cartAfterMutation(response);
+  }
+
+  // Cart item POSTs respond with the full cart; re-read it if one does not.
+  private async cartAfterMutation(response: Response): Promise<Cart> {
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {
+      // Fall back to a fresh read below
+    }
+    return Array.isArray(data?.items)
+      ? this.parseCartApi(data)
+      : this.getCartContents();
   }
 
   async clearCart(): Promise<void> {
@@ -1173,18 +1253,26 @@ export class OdaClient {
 
     // Structured ingredients with the product mapping addRecipeToCart uses,
     // so callers can see what a recipe would put in the cart without adding
-    // it. data.ingredients[] carries the product link; join it with the
-    // display list by index when the lists line up, else fall back to the
-    // ingredient's own display fields.
-    const rawIngredients: any[] = data.ingredients || [];
-    const displayList: any[] = data.ingredientsDisplayList || [];
-    const ingredientItems = rawIngredients.map((ing: any, i: number) => {
-      const display = displayList[i] || {};
+    // it. Both lists share an ingredient id; position is the fallback key.
+    const key = (entry: any, i: number) => entry?.id ?? `#${i}`;
+    const displayed = new Map<unknown, any>(
+      (data.ingredientsDisplayList || []).map((d: any, i: number) => [
+        key(d, i),
+        d,
+      ]),
+    );
+    const linked = new Map<unknown, any>(
+      (data.ingredients || []).map((ing: any, i: number) => [key(ing, i), ing]),
+    );
+    const keys = new Set([...displayed.keys(), ...linked.keys()]);
+    const ingredientItems = [...keys].map((k) => {
+      const display = displayed.get(k) || {};
+      const ing = linked.get(k) || {};
       const item: RecipeIngredient = {
-        title: display.title || ing.product?.full_name || ing.title || "",
-        quantity:
-          parseFloat(display.displayQuantity ?? ing.displayQuantity) || 0,
-        unit: display.displayUnit ?? ing.displayUnit ?? "",
+        title:
+          display.title || ing.ingredient?.title || ing.product?.fullName || "",
+        quantity: parseFloat(display.displayQuantity) || 0,
+        unit: display.displayUnit || "",
       };
       if (ing.product?.id) {
         item.product_id = ing.product.id;
@@ -1268,8 +1356,7 @@ export class OdaClient {
     if ([400, 401, 403].includes(response.status)) {
       return false;
     }
-    await this.throwApiError("Login", response);
-    return false; // unreachable, throwApiError always throws
+    return this.throwApiError("Login", response);
   }
 
   async checkUser(): Promise<string | null> {
@@ -1291,4 +1378,17 @@ export class OdaClient {
     }
     return null;
   }
+}
+
+/** Cart totals plus the lines for one product, returned after a cart change. */
+export function summarizeCartMutation(
+  cart: Cart,
+  productId: number,
+): CartMutationResult {
+  return {
+    label_text: cart.label_text,
+    product_quantity_count: cart.product_quantity_count,
+    display_price: cart.display_price,
+    lines: cart.items.filter((item) => item.id === productId),
+  };
 }

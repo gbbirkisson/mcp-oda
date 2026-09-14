@@ -62,6 +62,15 @@ export interface Cart {
   items: CartLine[];
 }
 
+/** Result of a cart change: cart totals plus the changed product's lines. */
+export interface CartMutationResult {
+  label_text: string;
+  product_quantity_count: number;
+  display_price: number;
+  /** Cart lines for the product; empty when it is no longer in the cart. */
+  lines: CartLine[];
+}
+
 export interface Recipe {
   id: number;
   name: string;
@@ -151,6 +160,8 @@ export interface DeliverySlot {
   is_cheapest?: boolean;
   /** Why the slot is unavailable, when Oda says so (often cart-dependent). */
   unavailable_description?: string;
+  /** Cart-dependent warnings for this slot. */
+  validation_messages?: string[];
 }
 
 export interface DeliveryDay {

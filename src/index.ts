@@ -43,6 +43,37 @@ program
   });
 
 // --- auth commands (unchanged) ---
+// Read the password from stdin.
+//
+// fs.readFileSync(0) throws EAGAIN when stdin is a non-blocking pipe whose writer
+// has not produced any data yet -- e.g. `op read ... | mcp-oda auth login --pass-stdin`
+// where the secret manager needs a moment to unlock. Retry on EAGAIN instead of
+// failing the login.
+function readPasswordFromStdin(): string {
+  const chunks: Buffer[] = [];
+  const buf = Buffer.alloc(64 * 1024);
+  const idle = new Int32Array(new SharedArrayBuffer(4));
+
+  for (;;) {
+    let read: number;
+    try {
+      read = fs.readSync(0, buf, 0, buf.length, null);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EAGAIN") {
+        Atomics.wait(idle, 0, 0, 20); // sleep 20ms without spinning
+        continue;
+      }
+      if (code === "EOF") break;
+      throw err;
+    }
+    if (read === 0) break;
+    chunks.push(Buffer.from(buf.subarray(0, read)));
+  }
+
+  return Buffer.concat(chunks).toString("utf-8").replace(/\r?\n$/, "");
+}
+
 const authCmd = program.command("auth").description("Authentication commands");
 
 authCmd
@@ -57,7 +88,7 @@ authCmd
   .action(async (cmdOpts) => {
     const opts = program.opts();
     const password = cmdOpts.passStdin
-      ? fs.readFileSync(0, "utf-8").replace(/\r?\n$/, "")
+      ? readPasswordFromStdin()
       : cmdOpts.pass;
     const server = new OdaServer(opts.dataDir);
     await server.auth(cmdOpts.user, password);
@@ -355,7 +386,7 @@ deliveryCmd
 // --- dump command (unchanged) ---
 program
   .command("dump <url>")
-  .description("Fetch a URL and print its hydration data")
+  .description("Fetch a URL and print its hydration data or JSON body")
   .action(async (url: string) => {
     const client = makeClient();
 
@@ -378,21 +409,44 @@ program
           : "(none found)",
       );
 
-      console.log(`\n=== Hydration data ===`);
-      console.log(
-        result.nextData
-          ? JSON.stringify(result.nextData, null, 2)
-          : "(not found)",
-      );
+      if (result.jsonBody !== null) {
+        console.log(`\n=== JSON body ===`);
+        console.log(JSON.stringify(result.jsonBody, null, 2));
+      } else {
+        console.log(`\n=== Hydration data ===`);
+        console.log(
+          result.nextData
+            ? JSON.stringify(result.nextData, null, 2)
+            : "(not found)",
+        );
+      }
     } catch (e) {
       console.error("Dump failed:", e);
       process.exit(1);
     }
   });
 
-program.parse();
-
 process.on("unhandledRejection", (err) => {
   console.error(err);
+  process.exit(1);
+});
+
+// Some Oda pages (recipe pages, notably) leave a referenced keep-alive
+// socket behind after the response body is fully consumed, so the event
+// loop never drains and the process hangs after the command has finished.
+// Exit explicitly once the command action resolves - except for the MCP
+// server, which must keep running on stdio.
+async function main() {
+  await program.parseAsync();
+  if (program.args[0] === "mcp") return;
+  // Let queued stdout writes drain before exiting.
+  await new Promise<void>((resolve) => {
+    process.stdout.write("", () => resolve());
+  });
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

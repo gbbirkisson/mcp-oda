@@ -910,3 +910,47 @@ describe("OdaClient cart fetch errors", () => {
     ]);
   });
 });
+
+describe("OdaClient login error classification", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const loginPage = () => ({
+    ok: true,
+    status: 200,
+    headers: { getSetCookie: () => ["csrftoken=tok; Path=/"] },
+    json: vi.fn(),
+    text: vi.fn().mockResolvedValue("<html></html>"),
+  });
+
+  it("returns false for rejected credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(loginPage())
+        .mockResolvedValueOnce(apiResponse(401, vi.fn(), "bad credentials")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.login("user@example.com", "wrong")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("throws on a server error instead of reporting bad credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(loginPage())
+        .mockResolvedValueOnce(apiResponse(500, vi.fn(), "boom")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.login("user@example.com", "pw")).rejects.toThrow(
+      /Login failed: HTTP 500.*boom/,
+    );
+  });
+});

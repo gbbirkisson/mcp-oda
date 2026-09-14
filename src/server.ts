@@ -149,7 +149,7 @@ export class OdaServer {
         inputSchema: {
           list_id: z.number().int().positive(),
           product_id: z.number().int().positive(),
-          quantity: z.number().positive().default(1),
+          quantity: z.number().int().positive().default(1),
           confirmation: z
             .literal("UPDATE SAVED LIST")
             .describe(
@@ -240,7 +240,10 @@ export class OdaServer {
       "cart_remove_item",
       {
         description: "Remove a product from the cart by product ID.",
-        inputSchema: { id: z.number(), count: z.number().optional() },
+        inputSchema: {
+          id: z.number().int().positive(),
+          count: z.number().int().positive().optional(),
+        },
       },
       this.toolHandler("cart_remove_item", async ({ id, count }) => {
         await this.getClient().removeFromCart(id, count);
@@ -252,7 +255,10 @@ export class OdaServer {
       "products_search",
       {
         description: "Search for products on Oda.",
-        inputSchema: { query: z.string(), page: z.number().optional() },
+        inputSchema: {
+          query: z.string(),
+          page: z.number().int().positive().optional(),
+        },
       },
       this.toolHandler("products_search", async ({ query, page }) => {
         return this.jsonResult(
@@ -265,7 +271,10 @@ export class OdaServer {
       "product_add_to_cart",
       {
         description: "Add a product to the cart by product ID.",
-        inputSchema: { id: z.number(), count: z.number().optional() },
+        inputSchema: {
+          id: z.number().int().positive(),
+          count: z.number().int().positive().optional(),
+        },
       },
       this.toolHandler("product_add_to_cart", async ({ id, count }) => {
         await this.getClient().addToCart(id, count);
@@ -279,7 +288,7 @@ export class OdaServer {
         description: "Search for recipes on Oda.",
         inputSchema: {
           query: z.string().optional(),
-          page: z.number().optional(),
+          page: z.number().int().positive().optional(),
           filter_ids: z.array(z.string()).optional(),
         },
       },
@@ -297,7 +306,7 @@ export class OdaServer {
       "recipes_get_details",
       {
         description: "Get recipe details by recipe ID.",
-        inputSchema: { id: z.number() },
+        inputSchema: { id: z.number().int().positive() },
       },
       this.toolHandler("recipes_get_details", async ({ id }) => {
         return this.jsonResult(await this.getClient().getRecipeDetails(id));
@@ -308,7 +317,10 @@ export class OdaServer {
       "recipe_add_to_cart",
       {
         description: "Add recipe ingredients to cart by recipe ID.",
-        inputSchema: { id: z.number(), portions: z.number() },
+        inputSchema: {
+          id: z.number().int().positive(),
+          portions: z.number().int().positive(),
+        },
       },
       this.toolHandler("recipe_add_to_cart", async ({ id, portions }) => {
         await this.getClient().addRecipeToCart(id, portions);
@@ -321,7 +333,7 @@ export class OdaServer {
       {
         description:
           "Remove a recipe and its ingredients from the cart by recipe ID.",
-        inputSchema: { id: z.number() },
+        inputSchema: { id: z.number().int().positive() },
       },
       this.toolHandler("recipe_remove_from_cart", async ({ id }) => {
         await this.getClient().removeRecipeFromCart(id);

@@ -756,47 +756,83 @@ describe("OdaClient frequent products request volume", () => {
   });
 });
 
-describe("OdaClient login error classification", () => {
+describe("OdaClient session cookie persistence", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  const loginPage = () => ({
+  const responseWithCookies = (cookies: string[]) => ({
     ok: true,
     status: 200,
-    headers: { getSetCookie: () => ["csrftoken=tok; Path=/"] },
-    json: vi.fn(),
-    text: vi.fn().mockResolvedValue("<html></html>"),
+    headers: { getSetCookie: () => cookies },
+    json: vi.fn().mockResolvedValue({ items: [] }),
+    text: vi.fn().mockResolvedValue(""),
   });
 
-  it("returns false for rejected credentials", async () => {
+  it("persists refreshed cookies to an existing cookie file", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "old" }), {
+      mode: 0o600,
+    });
     vi.stubGlobal(
       "fetch",
       vi
         .fn()
-        .mockResolvedValueOnce(loginPage())
-        .mockResolvedValueOnce(apiResponse(401, vi.fn(), "bad credentials")),
+        .mockResolvedValue(
+          responseWithCookies(["sessionid=new; Path=/; HttpOnly"]),
+        ),
     );
-    const client = new OdaClient("/nonexistent/cookies.json");
 
-    await expect(client.login("user@example.com", "wrong")).resolves.toBe(
-      false,
-    );
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      const saved = JSON.parse(fs.readFileSync(cookiePath, "utf-8"));
+      expect(saved.sessionid).toBe("new");
+      expect(fs.statSync(cookiePath).mode & 0o777).toBe(0o600);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
-  it("throws on a server error instead of reporting bad credentials", async () => {
+  it("leaves the cookie file untouched when Set-Cookie changes nothing", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "same" }), {
+      mode: 0o600,
+    });
+    const before = fs.statSync(cookiePath).mtimeMs;
     vi.stubGlobal(
       "fetch",
       vi
         .fn()
-        .mockResolvedValueOnce(loginPage())
-        .mockResolvedValueOnce(apiResponse(500, vi.fn(), "boom")),
+        .mockResolvedValue(responseWithCookies(["sessionid=same; Path=/"])),
     );
-    const client = new OdaClient("/nonexistent/cookies.json");
 
-    await expect(client.login("user@example.com", "pw")).rejects.toThrow(
-      /Login failed: HTTP 500.*boom/,
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      expect(fs.statSync(cookiePath).mtimeMs).toBe(before);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not create a cookie file for an anonymous client", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(responseWithCookies(["sessionid=anon"])),
     );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      expect(fs.existsSync(cookiePath)).toBe(false);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -872,5 +908,49 @@ describe("OdaClient cart fetch errors", () => {
         relative_price_unit: "/l",
       },
     ]);
+  });
+});
+
+describe("OdaClient login error classification", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const loginPage = () => ({
+    ok: true,
+    status: 200,
+    headers: { getSetCookie: () => ["csrftoken=tok; Path=/"] },
+    json: vi.fn(),
+    text: vi.fn().mockResolvedValue("<html></html>"),
+  });
+
+  it("returns false for rejected credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(loginPage())
+        .mockResolvedValueOnce(apiResponse(401, vi.fn(), "bad credentials")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.login("user@example.com", "wrong")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("throws on a server error instead of reporting bad credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(loginPage())
+        .mockResolvedValueOnce(apiResponse(500, vi.fn(), "boom")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.login("user@example.com", "pw")).rejects.toThrow(
+      /Login failed: HTTP 500.*boom/,
+    );
   });
 });

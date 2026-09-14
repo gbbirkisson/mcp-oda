@@ -755,3 +755,78 @@ describe("OdaClient frequent products request volume", () => {
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 });
+
+describe("OdaClient cart fetch errors", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects with an auth hint when fetching the cart fails with 401", async () => {
+    const json = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(apiResponse(401, json, "not authenticated")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.getCartContents()).rejects.toThrow(
+      /Get cart failed: HTTP 401 \(authentication may be required or expired\).*not authenticated/,
+    );
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the cart response is not parseable JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        apiResponse(
+          200,
+          vi.fn().mockRejectedValue(new SyntaxError("Unexpected token <")),
+        ),
+      ),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.getCartContents()).rejects.toThrow(
+      /Get cart failed: unparseable response/,
+    );
+  });
+
+  it("returns the parsed items for a successful cart response", async () => {
+    const cart = {
+      items: [
+        {
+          quantity: 2,
+          product: {
+            id: 42,
+            full_name: "Tine Lettmelk",
+            name_extra: "1,75 l",
+            gross_price: "31.90",
+            gross_unit_price: "18.23",
+            unit_price_quantity_abbreviation: "l",
+          },
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(apiResponse(200, vi.fn().mockResolvedValue(cart))),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const items = await client.getCartContents();
+    expect(items).toEqual([
+      {
+        id: 42,
+        name: "Tine Lettmelk",
+        subtitle: "1,75 l",
+        quantity: 2,
+        price: 31.9,
+        relative_price: 18.23,
+        relative_price_unit: "/l",
+      },
+    ]);
+  });
+});

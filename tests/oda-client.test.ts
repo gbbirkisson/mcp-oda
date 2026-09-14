@@ -756,6 +756,86 @@ describe("OdaClient frequent products request volume", () => {
   });
 });
 
+describe("OdaClient session cookie persistence", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const responseWithCookies = (cookies: string[]) => ({
+    ok: true,
+    status: 200,
+    headers: { getSetCookie: () => cookies },
+    json: vi.fn().mockResolvedValue({ items: [] }),
+    text: vi.fn().mockResolvedValue(""),
+  });
+
+  it("persists refreshed cookies to an existing cookie file", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "old" }), {
+      mode: 0o600,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          responseWithCookies(["sessionid=new; Path=/; HttpOnly"]),
+        ),
+    );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      const saved = JSON.parse(fs.readFileSync(cookiePath, "utf-8"));
+      expect(saved.sessionid).toBe("new");
+      expect(fs.statSync(cookiePath).mode & 0o777).toBe(0o600);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the cookie file untouched when Set-Cookie changes nothing", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    fs.writeFileSync(cookiePath, JSON.stringify({ sessionid: "same" }), {
+      mode: 0o600,
+    });
+    const before = fs.statSync(cookiePath).mtimeMs;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(responseWithCookies(["sessionid=same; Path=/"])),
+    );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      expect(fs.statSync(cookiePath).mtimeMs).toBe(before);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not create a cookie file for an anonymous client", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oda-cookie-"));
+    const cookiePath = path.join(tempDir, "cookies.json");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(responseWithCookies(["sessionid=anon"])),
+    );
+
+    try {
+      const client = new OdaClient(cookiePath);
+      await client.getCartContents();
+      expect(fs.existsSync(cookiePath)).toBe(false);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("OdaClient cart fetch errors", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -816,8 +896,8 @@ describe("OdaClient cart fetch errors", () => {
     );
     const client = new OdaClient("/nonexistent/cookies.json");
 
-    const items = await client.getCartContents();
-    expect(items).toEqual([
+    const result = await client.getCartContents();
+    expect(result.items).toEqual([
       {
         id: 42,
         name: "Tine Lettmelk",
@@ -826,7 +906,248 @@ describe("OdaClient cart fetch errors", () => {
         price: 31.9,
         relative_price: 18.23,
         relative_price_unit: "/l",
+        item_id: 0,
+        line_total: 63.8,
       },
+    ]);
+  });
+});
+
+describe("OdaClient login error classification", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const loginPage = () => ({
+    ok: true,
+    status: 200,
+    headers: { getSetCookie: () => ["csrftoken=tok; Path=/"] },
+    json: vi.fn(),
+    text: vi.fn().mockResolvedValue("<html></html>"),
+  });
+
+  it("returns false for rejected credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(loginPage())
+        .mockResolvedValueOnce(apiResponse(401, vi.fn(), "bad credentials")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.login("user@example.com", "wrong")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("throws on a server error instead of reporting bad credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(loginPage())
+        .mockResolvedValueOnce(apiResponse(500, vi.fn(), "boom")),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    await expect(client.login("user@example.com", "pw")).rejects.toThrow(
+      /Login failed: HTTP 500.*boom/,
+    );
+  });
+});
+
+describe("OdaClient saved list pagination", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const listPage = (ids: number[], next: string | null) =>
+    apiResponse(
+      200,
+      vi.fn().mockResolvedValue({
+        next,
+        previous: null,
+        results: ids.map((id) => ({
+          id,
+          title: `Liste ${id}`,
+          description: "",
+          number_of_products: 1,
+          number_of_items: 1,
+          total_quantity: 1,
+          url: `/no/lists/${id}/`,
+        })),
+      }),
+    );
+
+  it("follows next links across pages", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        listPage([1, 2], "https://oda.com/api/v1/product-lists/?page=2"),
+      )
+      .mockResolvedValueOnce(listPage([3], null));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const lists = await client.getSavedLists();
+    expect(lists.map((l) => l.id)).toEqual([1, 2, 3]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops on a pagination loop", async () => {
+    const url = "https://oda.com/api/v1/product-lists/?filter=product_lists";
+    const fetchMock = vi.fn().mockResolvedValue(listPage([1], url));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const lists = await client.getSavedLists();
+    expect(lists.map((l) => l.id)).toEqual([1]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("OdaClient cart totals and grouping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps cart totals and annotates group membership per line", async () => {
+    // Mirrors the documented GET /api/v1/cart/ response (ODA_API.md)
+    const cartResponse = {
+      id: 0,
+      label_text: "3 varer",
+      product_quantity_count: 3,
+      display_price: "1068.40",
+      total_gross_amount: "1116.29",
+      items: [
+        {
+          item_id: 111,
+          quantity: 2,
+          display_price_total: "63.80",
+          product: {
+            id: 42,
+            full_name: "Tine Lettmelk",
+            name_extra: "1,75 l",
+            gross_price: "31.90",
+            gross_unit_price: "18.23",
+            unit_price_quantity_abbreviation: "l",
+          },
+        },
+      ],
+      groups: [
+        {
+          id: "recipe-1",
+          title: "Pizza Margherita",
+          group_type: "recipe",
+          items: [
+            {
+              item_id: 222,
+              quantity: 1,
+              display_price_total: "29.90",
+              product: {
+                id: 9452,
+                full_name: "Avokado modnet Chile / Spania/ Marokko",
+                name: "Avokado modnet",
+                name_extra: "Chile / Spania/ Marokko, 2 stk",
+                gross_price: "29.90",
+                gross_unit_price: "14.95",
+                unit_price_quantity_abbreviation: "stk",
+              },
+            },
+          ],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          apiResponse(200, vi.fn().mockResolvedValue(cartResponse)),
+        ),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const cart = await client.getCartContents();
+    expect(cart.label_text).toBe("3 varer");
+    expect(cart.product_quantity_count).toBe(3);
+    expect(cart.display_price).toBe(1068.4);
+    expect(cart.total_gross_amount).toBe(1116.29);
+    expect(cart.items).toHaveLength(2);
+
+    const [milk, avocado] = cart.items;
+    expect(milk.item_id).toBe(111);
+    expect(milk.line_total).toBe(63.8);
+    expect(milk.group_title).toBeUndefined();
+
+    expect(avocado.id).toBe(9452);
+    expect(avocado.item_id).toBe(222);
+    expect(avocado.line_total).toBe(29.9);
+    expect(avocado.group_title).toBe("Pizza Margherita");
+    expect(avocado.group_type).toBe("recipe");
+  });
+});
+
+describe("OdaClient recipe ingredient mapping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const recipeData = {
+    title: "Pizza Margherita",
+    lead: "Klassisk pizza",
+    ingredientsDisplayList: [
+      { title: "Mozzarella, fersk", displayQuantity: "250", displayUnit: "g" },
+      { title: "Basilikum", displayQuantity: "1", displayUnit: "pott" },
+    ],
+    ingredients: [
+      {
+        product: { id: 4321, full_name: "Mozzarella" },
+        portionQuantity: "0.5",
+      },
+      {},
+    ],
+    instructions: { instructions: [{ text: "Stek pizzaen" }] },
+  };
+
+  const hydrationHtml = () => {
+    const queries = [
+      { queryKey: [{ _id: "recipeDetailApi" }], state: { data: recipeData } },
+    ];
+    return `<html><script>self.__next_f.push([1,${JSON.stringify(
+      `"queries":${JSON.stringify(queries)}`,
+    )}])</script></html>`;
+  };
+
+  it("exposes structured ingredients with product mapping", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { getSetCookie: () => [], get: () => "text/html" },
+        json: vi.fn(),
+        text: vi.fn().mockResolvedValue(hydrationHtml()),
+      }),
+    );
+    const client = new OdaClient("/nonexistent/cookies.json");
+
+    const detail = await client.getRecipeDetails(1);
+    expect(detail.name).toBe("Pizza Margherita");
+    expect(detail.ingredients).toEqual([
+      "250 g Mozzarella, fersk",
+      "1 pott Basilikum",
+    ]);
+    expect(detail.ingredient_items).toEqual([
+      {
+        title: "Mozzarella, fersk",
+        quantity: 250,
+        unit: "g",
+        product_id: 4321,
+        portion_quantity: 0.5,
+      },
+      { title: "Basilikum", quantity: 1, unit: "pott" },
     ]);
   });
 });

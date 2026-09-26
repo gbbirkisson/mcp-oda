@@ -1,5 +1,61 @@
 # Changelog
 
+## [2.0.0](https://github.com/gbbirkisson/mcp-oda/compare/1.0.0...2.0.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* getCartContents() returns Cart instead of CartItem[]; the cart list CLI command and the cart_get_contents MCP tool emit the new object.
+
+### Features
+
+* add --limit and --exclude-in-cart to cart recommendations ([ef9efa2](https://github.com/gbbirkisson/mcp-oda/commit/ef9efa2d4f88aff9a9324629902434d3585bfaab))
+* add cart set command and cart_set_quantity MCP tool ([ef9efa2](https://github.com/gbbirkisson/mcp-oda/commit/ef9efa2d4f88aff9a9324629902434d3585bfaab))
+* **dump:** print raw JSON bodies for API endpoints ([#161](https://github.com/gbbirkisson/mcp-oda/issues/161)) ([2010435](https://github.com/gbbirkisson/mcp-oda/commit/2010435fbd5857c91d75477db3cf5e02b024536f))
+* enrich product search results with availability, discounts and filters ([#162](https://github.com/gbbirkisson/mcp-oda/issues/162)) ([bedf9e1](https://github.com/gbbirkisson/mcp-oda/commit/bedf9e15f2353fe57fd18fef90cf285b58765a8e))
+* expose ingredient-to-product mapping in recipe details ([#160](https://github.com/gbbirkisson/mcp-oda/issues/160)) ([9028983](https://github.com/gbbirkisson/mcp-oda/commit/9028983077e603b48ae57a2058b0eaf16445a30a))
+* read-only delivery slot listing ([#164](https://github.com/gbbirkisson/mcp-oda/issues/164)) ([06b2a5f](https://github.com/gbbirkisson/mcp-oda/commit/06b2a5fcc9a077a979ab3fa8470f3366091c9fd4))
+* return cart state from cart changes ([#175](https://github.com/gbbirkisson/mcp-oda/issues/175)) ([ef9efa2](https://github.com/gbbirkisson/mcp-oda/commit/ef9efa2d4f88aff9a9324629902434d3585bfaab))
+* return cart totals and grouping from cart contents ([#156](https://github.com/gbbirkisson/mcp-oda/issues/156)) ([c096dc1](https://github.com/gbbirkisson/mcp-oda/commit/c096dc1484c44a57cb3f4d0ea12f9d35bffec4c3))
+
+
+### Bug Fixes
+
+* **cli:** exit explicitly after command completion ([#166](https://github.com/gbbirkisson/mcp-oda/issues/166)) ([712366a](https://github.com/gbbirkisson/mcp-oda/commit/712366aa1bfb7cc0c8dc9c5b404133db202c3d36))
+* **cli:** retry EAGAIN when reading password from stdin ([#152](https://github.com/gbbirkisson/mcp-oda/issues/152)) ([d372d93](https://github.com/gbbirkisson/mcp-oda/commit/d372d939d5ac40422ab70236cbbe73b365dab153))
+* **deps:** update dependency @modelcontextprotocol/sdk to v1.30.1 ([#184](https://github.com/gbbirkisson/mcp-oda/issues/184)) ([f6ecb5a](https://github.com/gbbirkisson/mcp-oda/commit/f6ecb5adcd9d38eb11cbbac19e795b6399d39eed))
+* **deps:** update dependency @types/node to v26.4.0 ([#144](https://github.com/gbbirkisson/mcp-oda/issues/144)) ([2658812](https://github.com/gbbirkisson/mcp-oda/commit/26588128233a90e296e193dcefcd293e291e3a7d))
+* **deps:** update dependency @types/node to v26.4.1 ([#150](https://github.com/gbbirkisson/mcp-oda/issues/150)) ([f84a158](https://github.com/gbbirkisson/mcp-oda/commit/f84a1581891f5b7e9f4c062bbd7d88d7e3d952b7))
+* **deps:** update dependency @types/node to v26.5.0 ([#168](https://github.com/gbbirkisson/mcp-oda/issues/168)) ([2e687a6](https://github.com/gbbirkisson/mcp-oda/commit/2e687a6df40ee4f4f7de4c59fa7acd81bd7e7bc6))
+* **deps:** update dependency @types/node to v26.5.1 ([#170](https://github.com/gbbirkisson/mcp-oda/issues/170)) ([2622fba](https://github.com/gbbirkisson/mcp-oda/commit/2622fba63a7c58f432229fa6fb1a5114762c9cca))
+* **deps:** update dependency @types/node to v26.6.1 ([#177](https://github.com/gbbirkisson/mcp-oda/issues/177)) ([d228bd0](https://github.com/gbbirkisson/mcp-oda/commit/d228bd08c7913453a5caa53aa23244a7746c15c1))
+* **deps:** update dependency @types/node to v26.6.2 ([#180](https://github.com/gbbirkisson/mcp-oda/issues/180)) ([25f106b](https://github.com/gbbirkisson/mcp-oda/commit/25f106b61e43200037666dedd95ab377f8537c08))
+* **deps:** update dependency @types/node to v26.6.3 ([#186](https://github.com/gbbirkisson/mcp-oda/issues/186)) ([186c6e5](https://github.com/gbbirkisson/mcp-oda/commit/186c6e5a3f53621593d443e97068ef763d662170))
+* **deps:** update dependency prettier to v3.9.7 ([#178](https://github.com/gbbirkisson/mcp-oda/issues/178)) ([721898f](https://github.com/gbbirkisson/mcp-oda/commit/721898f9d8a05767d5640d2f48ec030812ce7c20))
+* **deps:** update dependency prettier to v3.9.8 ([#179](https://github.com/gbbirkisson/mcp-oda/issues/179)) ([a26d0d3](https://github.com/gbbirkisson/mcp-oda/commit/a26d0d381486a82a5a63e1606f2d792cf97dceeb))
+* **deps:** update dependency prettier to v3.9.9 ([#183](https://github.com/gbbirkisson/mcp-oda/issues/183)) ([dde4f8c](https://github.com/gbbirkisson/mcp-oda/commit/dde4f8cce2bf66b6c0343092dfc54975e1f6d7a8))
+* **deps:** update dependency tsx to v4.23.13 ([#148](https://github.com/gbbirkisson/mcp-oda/issues/148)) ([3fb0aac](https://github.com/gbbirkisson/mcp-oda/commit/3fb0aac553b5994d73286aae370b6bfe443df6a5))
+* **deps:** update dependency tsx to v4.23.15 ([#181](https://github.com/gbbirkisson/mcp-oda/issues/181)) ([72bfc83](https://github.com/gbbirkisson/mcp-oda/commit/72bfc837f7ec3b12c030d7e2de10609f27b01c3c))
+* **deps:** update dependency typescript-eslint to v8.69.0 ([#149](https://github.com/gbbirkisson/mcp-oda/issues/149)) ([e39bea8](https://github.com/gbbirkisson/mcp-oda/commit/e39bea812c1422336dc0e1d2230ab75ec76c425c))
+* **deps:** update dependency typescript-eslint to v8.70.0 ([#169](https://github.com/gbbirkisson/mcp-oda/issues/169)) ([4a9a646](https://github.com/gbbirkisson/mcp-oda/commit/4a9a646755197097406caefd382fc44741442a5c))
+* **deps:** update dependency typescript-eslint to v8.70.1 ([#182](https://github.com/gbbirkisson/mcp-oda/issues/182)) ([1d380cb](https://github.com/gbbirkisson/mcp-oda/commit/1d380cbb4fad5ae2bfc49c4b6a89d8bd6909fc1f))
+* **deps:** update dependency vitest to v5 ([#167](https://github.com/gbbirkisson/mcp-oda/issues/167)) ([068a1c8](https://github.com/gbbirkisson/mcp-oda/commit/068a1c87b41437ef8bce22e2c4d8e427ce946d83))
+* **deps:** update dependency vitest to v5.0.1 ([#176](https://github.com/gbbirkisson/mcp-oda/issues/176)) ([d3eecd4](https://github.com/gbbirkisson/mcp-oda/commit/d3eecd4415f47d0fdabe2ba8c218885fddbeaeb3))
+* **deps:** update dependency vitest to v5.0.2 ([#185](https://github.com/gbbirkisson/mcp-oda/issues/185)) ([d0ec540](https://github.com/gbbirkisson/mcp-oda/commit/d0ec540697d6a80db92863d8c8c8e05b8b5dd500))
+* **deps:** update dependency zod to v4.5.2 ([#146](https://github.com/gbbirkisson/mcp-oda/issues/146)) ([40756bc](https://github.com/gbbirkisson/mcp-oda/commit/40756bcc6be79e2b8d82fcc1b724af9dda6c52f6))
+* **deps:** update dependency zod to v4.5.4 ([#147](https://github.com/gbbirkisson/mcp-oda/issues/147)) ([d5c74b9](https://github.com/gbbirkisson/mcp-oda/commit/d5c74b9c7dac094864d5941fe2701e6234dbe15a))
+* **deps:** update dependency zod to v4.6.1 ([#171](https://github.com/gbbirkisson/mcp-oda/issues/171)) ([3a2dfef](https://github.com/gbbirkisson/mcp-oda/commit/3a2dfef4a98685a46e3c4441d5e98779c9687029))
+* **deps:** update dependency zod to v4.6.2 ([#172](https://github.com/gbbirkisson/mcp-oda/issues/172)) ([f192147](https://github.com/gbbirkisson/mcp-oda/commit/f1921479987df750376141aaae4471f87e00c717))
+* **deps:** update dependency zod to v4.6.4 ([#173](https://github.com/gbbirkisson/mcp-oda/issues/173)) ([e38bc3c](https://github.com/gbbirkisson/mcp-oda/commit/e38bc3c0a7c4553eb8db3f920df297e820b4f61f))
+* **deps:** update dependency zod to v4.6.5 ([#174](https://github.com/gbbirkisson/mcp-oda/issues/174)) ([22b2ad2](https://github.com/gbbirkisson/mcp-oda/commit/22b2ad22fc381e06fdfa23ca4efe7ebf0c35c517))
+* distinguish bad credentials from server errors on login, tighten MCP input schemas ([#155](https://github.com/gbbirkisson/mcp-oda/issues/155)) ([6a9317e](https://github.com/gbbirkisson/mcp-oda/commit/6a9317e23a14ca5be6d24557e71401b258133a1f))
+* follow pagination when listing saved lists ([#165](https://github.com/gbbirkisson/mcp-oda/issues/165)) ([f917d7f](https://github.com/gbbirkisson/mcp-oda/commit/f917d7f0d2396ba2d7820d8bf5f41e9b6f1ba0cb))
+* keep API calls working when the cookie file cannot be written ([ef9efa2](https://github.com/gbbirkisson/mcp-oda/commit/ef9efa2d4f88aff9a9324629902434d3585bfaab))
+* match recipe ingredients to products by id instead of position ([ef9efa2](https://github.com/gbbirkisson/mcp-oda/commit/ef9efa2d4f88aff9a9324629902434d3585bfaab))
+* persist refreshed session cookies to disk ([#154](https://github.com/gbbirkisson/mcp-oda/issues/154)) ([af60b0a](https://github.com/gbbirkisson/mcp-oda/commit/af60b0a32d7ef5c1d0bfdf6a31e936ed3ec9bd96))
+* raise on cart fetch failures instead of returning an empty cart ([#153](https://github.com/gbbirkisson/mcp-oda/issues/153)) ([2bc67dd](https://github.com/gbbirkisson/mcp-oda/commit/2bc67dd3de143db2338fbe302ebc69307073cf54))
+* read delivery slot validation messages from the documented field ([ef9efa2](https://github.com/gbbirkisson/mcp-oda/commit/ef9efa2d4f88aff9a9324629902434d3585bfaab))
+
 ## [1.0.0](https://github.com/gbbirkisson/mcp-oda/compare/0.5.0...1.0.0) (2026-08-26)
 
 

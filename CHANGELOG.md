@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/gbbirkisson/mcp-oda/compare/2.0.0...2.0.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **deps:** update dependency vitest to v5.0.5 ([#200](https://github.com/gbbirkisson/mcp-oda/issues/200)) ([e3fa970](https://github.com/gbbirkisson/mcp-oda/commit/e3fa970c20c5f405db65bd94a6c2f3557ab9ac52))
+
 ## [2.0.0](https://github.com/gbbirkisson/mcp-oda/compare/1.0.0...2.0.0) (2026-10-13)
 
 

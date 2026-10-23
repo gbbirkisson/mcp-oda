@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.2](https://github.com/gbbirkisson/mcp-oda/compare/2.0.1...2.0.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @modelcontextprotocol/sdk to v1.32.2 ([#204](https://github.com/gbbirkisson/mcp-oda/issues/204)) ([137e20d](https://github.com/gbbirkisson/mcp-oda/commit/137e20dc187efbc921b449df8672732832f64845))
+* **deps:** update dependency typescript-eslint to v8.72.0 ([#202](https://github.com/gbbirkisson/mcp-oda/issues/202)) ([dadb188](https://github.com/gbbirkisson/mcp-oda/commit/dadb18848b82b43c9db0e296d3b258d343582adf))
+
 ## [2.0.1](https://github.com/gbbirkisson/mcp-oda/compare/2.0.0...2.0.1) (2026-10-15)
 
 

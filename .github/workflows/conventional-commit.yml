@@ -2,13 +2,7 @@
 name: Conventional commit
 
 on:
-  pull_request_target:
-    types:
-      - edited
-      - opened
-      - ready_for_review
-      - reopened
-      - synchronize
+  workflow_dispatch:
 
 permissions:
   pull-requests: write

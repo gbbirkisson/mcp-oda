@@ -4,6 +4,7 @@
       <img src="mcp.svg" alt="Logo" height="128">
     </a>
     <br>mcp-oda
+    <br><img src="https://img.shields.io/badge/status-deprecated-red?style=for-the-badge" alt="Deprecated">
   </p>
 </h1>
 
@@ -11,10 +12,12 @@
   A Model Context Protocol (MCP) server for interacting with <a href="https://oda.com">oda.com</a>
 </p>
 
-If this project is just what you needed and/or has been helpful to you, please consider buying
-me a coffee ☕
-
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/gbbirkisson)
+> [!CAUTION]
+> **This project is deprecated.**
+>
+> Oda now provides an official MCP server. Use it instead:
+>
+> 👉 **[oda.com/mcp](https://oda.com/mcp?demo&lang=en)**
 
 <h2>Table of contents</h2>
 
@@ -60,7 +63,8 @@ This project requires Node.js (v18+).
 Authenticate with your Oda account:
 
 ```bash
-read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+read -rsp "Oda password: " ODA_PASSWORD
+printf '\n'
 printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
 unset ODA_PASSWORD
 ```
@@ -121,7 +125,8 @@ npx github:gbbirkisson/mcp-oda recipe remove 123
 npx github:gbbirkisson/mcp-oda delivery slots
 
 # Authentication
-read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+read -rsp "Oda password: " ODA_PASSWORD
+printf '\n'
 printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
 unset ODA_PASSWORD
 npx github:gbbirkisson/mcp-oda auth logout
@@ -172,7 +177,8 @@ If your login session is not persisting between runs:
    ```
 2. Re-authenticate:
    ```bash
-   read -rsp "Oda password: " ODA_PASSWORD; printf '\n'
+   read -rsp "Oda password: " ODA_PASSWORD
+   printf '\n'
    printf '%s' "$ODA_PASSWORD" | npx github:gbbirkisson/mcp-oda auth login --user your@email.com --pass-stdin
    unset ODA_PASSWORD
    ```
